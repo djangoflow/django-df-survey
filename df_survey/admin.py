@@ -1,4 +1,4 @@
-from typing import Sequence, Any
+from typing import Any, Sequence
 
 from django.contrib import admin
 from django.contrib.admin.options import InlineModelAdmin
@@ -90,7 +90,7 @@ class SurveyAdmin(admin.ModelAdmin):
     list_display = ("title", "step_count")
     inlines = (SurveyStepInline,)
 
-    def step_count(self, obj):
+    def step_count(self, obj: Survey) -> int:
         return obj.steps.count()
 
 
@@ -112,7 +112,9 @@ class UserSurveyAdmin(admin.ModelAdmin):
     autocomplete_fields = ("user", "current_step")
     inlines = (UserSurveyStepInline,)
 
-    def get_inlines(self, request: HttpRequest, obj: Any) -> list[type[InlineModelAdmin]]:
+    def get_inlines(
+        self, request: HttpRequest, obj: Any
+    ) -> list[type[InlineModelAdmin]]:
         if obj is None:
             return []
         return super().get_inlines(request, obj)

@@ -1,20 +1,18 @@
-from typing import Optional
+from typing import Any, Optional
 
 from .models import Survey, UserSurvey
 
 
 class BaseSurveyRenderer:
-    def render_survey(self, survey: Survey, usersurvey: Optional[UserSurvey]) -> any:
+    def render_survey(self, survey: Survey, usersurvey: Optional[UserSurvey]) -> Any:
         pass
 
 
 class JSONSurveyRenderer(BaseSurveyRenderer):
-    def render_survey(self, survey: Survey, usersurvey: Optional[UserSurvey]) -> dict:
+    def render_survey(self, survey: Survey, usersurvey: Optional[UserSurvey]) -> Any:
         pass
 
-    def render_responses(
-        self, survey: Survey, usersurvey: Optional[UserSurvey]
-    ) -> dict:
+    def render_responses(self, survey: Survey, usersurvey: Optional[UserSurvey]) -> Any:
         pass
 
 

@@ -1,7 +1,12 @@
 from hashid_field.rest import HashidSerializerCharField
 from rest_framework import serializers
 
-from df_survey.models import Step, Survey, SurveyStep, UserSurvey, UserSurveyStep, UserSurveyStep
+from df_survey.models import (
+    Step,
+    Survey,
+    UserSurvey,
+    UserSurveyStep,
+)
 
 """
 
@@ -126,7 +131,7 @@ class UserSurveyStep(models.Model):
 
     def __str__(self):
         return f"{self.user_survey} - {self.step}"
-    
+
 """
 
 

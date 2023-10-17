@@ -1,3 +1,5 @@
+from typing import Any
+
 from django.conf import settings
 from django.db import models
 
@@ -21,7 +23,7 @@ class Step(models.Model):
     # TODO: define jsonschema based on type
     validators = models.JSONField(default=dict, blank=True)
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.title} <{self.type}>"
 
 
@@ -71,7 +73,7 @@ class Survey(models.Model):
 
     steps = models.ManyToManyField(Step, through="SurveyStep")
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.title
 
 
@@ -87,7 +89,7 @@ class SurveyStep(models.Model):
         )
         ordering = ("sequence",)
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.survey} - {self.step}"
 
 
@@ -98,10 +100,10 @@ class UserSurvey(models.Model):
         Step, on_delete=models.SET_NULL, null=True, blank=True
     )
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.user} - {self.survey}"
 
-    def save(self, *args, **kwargs):
+    def save(self, *args: Any, **kwargs: Any) -> None:
         is_new = self._state.adding
         super().save(*args, **kwargs)
 
@@ -127,8 +129,10 @@ class UserSurvey(models.Model):
 
 class UserSurveyStep(models.Model):
     step = models.ForeignKey(Step, on_delete=models.CASCADE)
-    user_survey = models.ForeignKey(UserSurvey, on_delete=models.CASCADE, related_name="steps")
+    user_survey = models.ForeignKey(
+        UserSurvey, on_delete=models.CASCADE, related_name="steps"
+    )
     response = models.JSONField(null=True, blank=True)
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.user_survey} - {self.step}"
