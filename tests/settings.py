@@ -11,6 +11,7 @@ from df_api_drf.defaults import (
 from df_survey.defaults import DF_SURVEY_INSTALLED_APPS
 
 DEBUG = True
+HASHID_FIELD_SALT = "111111"
 
 ROOT_URLCONF = "tests.urls"
 SECRET_KEY = "111111"

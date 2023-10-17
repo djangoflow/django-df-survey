@@ -11,5 +11,4 @@ def test_test_endpoint_returns_200(client: APIClient) -> None:
 
 
 def test_settings_rewrite() -> None:
-
-    assert api_settings.TEST_SETTING == settings.DF_SURVEY['TEST_SETTING']
+    assert api_settings.TEST_SETTING == settings.DF_SURVEY["TEST_SETTING"]

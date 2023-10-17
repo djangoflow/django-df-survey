@@ -1,3 +1,11 @@
+from hashid_field.rest import HashidSerializerCharField
+from rest_framework import serializers
+
+from df_survey.models import Step, Survey, SurveyStep, UserSurvey, UserSurveyStep, UserSurveyStep
+
+"""
+
+
 from django.conf import settings
 from django.db import models
 
@@ -39,15 +47,11 @@ class Step(models.Model):
 #     ...
 #
 # class SingleSelectStep(models.Model):
-#     """
 #     Multiple options
-#     """
 #     step = models.OneToOneField(Step, on_delete=models.CASCADE)
 #
 # class MultiSelectStep(models.Model):
-#     """
 #     Multiple options
-#     """
 #     step = models.OneToOneField(Step, on_delete=models.CASCADE)
 #
 #
@@ -74,7 +78,6 @@ class Survey(models.Model):
     def __str__(self):
         return self.title
 
-
 class SurveyStep(models.Model):
     sequence = models.PositiveIntegerField(default=1000)
     survey = models.ForeignKey(Survey, on_delete=models.CASCADE)
@@ -90,7 +93,6 @@ class SurveyStep(models.Model):
     def __str__(self):
         return f"{self.survey} - {self.step}"
 
-
 class UserSurvey(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     survey = models.ForeignKey(Survey, on_delete=models.CASCADE)
@@ -100,14 +102,6 @@ class UserSurvey(models.Model):
 
     def __str__(self):
         return f"{self.user} - {self.survey}"
-
-    def save(self, *args, **kwargs):
-        is_new = self._state.adding
-        super().save(*args, **kwargs)
-
-        if is_new:
-            for step in self.survey.steps.all():
-                UserSurveyStep.objects.create(step=step, user_survey=self)
 
     # class Event(models.TextChoices):
     #     STARTED = "started"
@@ -127,8 +121,58 @@ class UserSurvey(models.Model):
 
 class UserSurveyStep(models.Model):
     step = models.ForeignKey(Step, on_delete=models.CASCADE)
-    user_survey = models.ForeignKey(UserSurvey, on_delete=models.CASCADE, related_name="steps")
-    response = models.JSONField(null=True, blank=True)
+    user_survey = models.ForeignKey(UserSurvey, on_delete=models.CASCADE)
+    response = models.JSONField()
 
     def __str__(self):
         return f"{self.user_survey} - {self.step}"
+    
+"""
+
+
+class StepSerializer(serializers.ModelSerializer):
+    id = HashidSerializerCharField(read_only=True)
+
+    class Meta:
+        model = Step
+        fields = [
+            "id",
+            "title",
+            "subtitle",
+            "description",
+            "image",
+            "type",
+            "validators",
+        ]
+
+
+class SurveySerializer(serializers.ModelSerializer):
+    id = HashidSerializerCharField(read_only=True)
+
+    class Meta:
+        model = Survey
+        fields = ["id", "title", "description"]
+
+
+class UserSurveyStepSerializer(serializers.ModelSerializer):
+    id = HashidSerializerCharField(read_only=True)
+    step = StepSerializer(read_only=True)
+
+    class Meta:
+        model = UserSurveyStep
+        fields = ["id", "step", "response"]
+
+
+class UserSurveySerializer(serializers.ModelSerializer):
+    id = HashidSerializerCharField(read_only=True)
+    steps = UserSurveyStepSerializer(many=True, read_only=True)
+    survey = SurveySerializer(read_only=True)
+    current_step = serializers.PrimaryKeyRelatedField(
+        pk_field=HashidSerializerCharField(source_field="df_survey.Step.id"),
+        queryset=Step.objects.all(),
+        allow_null=True,
+    )
+
+    class Meta:
+        model = UserSurvey
+        fields = ["id", "survey", "steps", "current_step"]

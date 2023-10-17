@@ -1,7 +1,16 @@
-from django.urls import path
+from django.conf import settings
+from rest_framework.routers import DefaultRouter, SimpleRouter
 
-from .views import TestView
+from .viewsets import UserSurveyViewSet, UserSurveyStepViewSet
 
-urlpatterns = [
-    path("test/", TestView.as_view(), name="test"),
-]
+urlpatterns = []
+
+if settings.DEBUG:
+    router = DefaultRouter()
+else:
+    router = SimpleRouter()
+
+router.register("user-surveys", UserSurveyViewSet, basename="user-surveys")
+router.register("user-survey-steps", UserSurveyStepViewSet, basename="user-survey-steps")
+
+urlpatterns += router.urls

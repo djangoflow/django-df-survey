@@ -25,6 +25,8 @@ dependencies = [
     "Django>=4.2.0",
     "djangorestframework>=3.12.0",
     "django-df-api-drf>=1.0.0",
+    "Pillow",
+    "django-hashid-field",
 ]
 
 [project.optional-dependencies]
