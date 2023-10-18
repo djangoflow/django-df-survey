@@ -176,6 +176,7 @@ class UserSurveySerializer(serializers.ModelSerializer):
         pk_field=HashidSerializerCharField(source_field="df_survey.Step.id"),
         queryset=Step.objects.all(),
         allow_null=True,
+        required=False,
     )
 
     class Meta:
