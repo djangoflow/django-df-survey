@@ -1,138 +1,144 @@
-from typing import Any
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any
 
-from django.conf import settings
+from django.contrib.auth import get_user_model
+from django.core import exceptions
 from django.db import models
+from model_utils.models import TimeStampedModel
+
+if TYPE_CHECKING:
+    from django.contrib.auth.models import User
+else:
+    User = get_user_model()
 
 
-class Step(models.Model):
-    class Type(models.TextChoices):
-        information = "information"
-        text = "text"
-        integer = "integer"
-        single_select = "single_select"
-        multi_select = "multi_select"
-        date = "date"
-        time = "time"
-        datetime = "datetime"
+class SurveyCategory(models.Model):
+    slug = models.CharField(max_length=128)
 
-    title = models.CharField(max_length=255)
-    subtitle = models.CharField(max_length=255, default="", blank=True)
-    description = models.TextField(default="", blank=True)
-    image = models.ImageField(upload_to="survey/steps", null=True, blank=True)
-    type = models.CharField(max_length=255, choices=Type.choices)
-    # TODO: define jsonschema based on type
-    validators = models.JSONField(default=dict, blank=True)
-
-    def __str__(self) -> str:
-        return f"{self.title} <{self.type}>"
-
-
-# class InformationStep(models.Model):
-#     step = models.OneToOneField(Step, on_delete=models.CASCADE)
-#     icon =
-#     avatar =
-#     image =
-#     description =
-#
-# class TextStep(models.Model):
-#     pass
-#
-# class IntegerStep(models.Model):
-#     ...
-#
-# class SingleSelectStep(models.Model):
-#     """
-#     Multiple options
-#     """
-#     step = models.OneToOneField(Step, on_delete=models.CASCADE)
-#
-# class MultiSelectStep(models.Model):
-#     """
-#     Multiple options
-#     """
-#     step = models.OneToOneField(Step, on_delete=models.CASCADE)
-#
-#
-# class SelectOption(models.Model):
-#     select = models.ForeignKey(Select)
-#     is_default = models.BooleanField()
-#
-#
-# class DateTimeStep(models.Model):
-#     ...
-#
-# class StepCondition(models.Model):
-#     source = models.ForeignKey(Step, on_delete=models.CASCADE)
-#     condition = models.CharField(max_length=256)
-
-
-class Survey(models.Model):
-    # is_template = models.BooleanField(default=False)
-    title = models.CharField(max_length=255)
-    description = models.TextField(default="", blank=True)
-
-    steps = models.ManyToManyField(Step, through="SurveyStep")
-
-    def __str__(self) -> str:
-        return self.title
-
-
-class SurveyStep(models.Model):
-    sequence = models.PositiveIntegerField(default=1000)
-    survey = models.ForeignKey(Survey, on_delete=models.CASCADE)
-    step = models.ForeignKey(Step, on_delete=models.CASCADE)
+    def __str__(self):
+        return self.slug
 
     class Meta:
-        unique_together = (
-            ("survey", "step"),
-            ("survey", "sequence"),
-        )
-        ordering = ("sequence",)
-
-    def __str__(self) -> str:
-        return f"{self.survey} - {self.step}"
+        verbose_name_plural = "Survey categories"
 
 
-class UserSurvey(models.Model):
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
-    survey = models.ForeignKey(Survey, on_delete=models.CASCADE)
-    current_step = models.ForeignKey(
-        Step, on_delete=models.SET_NULL, null=True, blank=True
+def validate_task_json(json):
+    # 1. Ensure all target steps are present in rules
+    step_identifiers = [step["stepIdentifier"]["id"] for step in json["steps"]]
+
+    errors = []
+    if "rules" in json:
+        line = 0
+        for rule in json["rules"]:
+            if rule["type"] == "conditional":
+                step_id = rule["triggerStepIdentifier"]["id"]
+                if step_id not in step_identifiers:
+                    print("VVVs")
+
+                    errors.append(
+                        {
+                            "task": f"Invalid triggerStepIdentifier '{step_id}' in rule '{line}'"
+                        }
+                    )
+                for k, v in rule["values"].items():
+                    if v not in step_identifiers:
+                        errors.append(
+                            {
+                                "task": [
+                                    f"Invalid target step '{v}' in value '{k}' of rule '{line}'"
+                                ]
+                            }
+                        )
+            line += 1
+        if errors:
+            raise exceptions.ValidationError(errors)
+
+
+class SurveyTemplate(models.Model):
+    title = models.CharField(max_length=128)
+    description = models.TextField(null=True, blank=True)
+    sequence = models.PositiveSmallIntegerField(
+        help_text="Display sequence, lower means first", default=1000
     )
+    category = models.ForeignKey(
+        SurveyCategory, on_delete=models.SET_NULL, null=True, blank=True
+    )
+    task = models.JSONField(validators=[validate_task_json])
 
-    def __str__(self) -> str:
-        return f"{self.user} - {self.survey}"
 
-    def save(self, *args: Any, **kwargs: Any) -> None:
-        is_new = self._state.adding
+class UserSurveyManager(models.Manager):
+    def get_queryset(self):
+        return super().get_queryset().select_related("template", "template__category")
+
+    def create_for_users(self, template=None, users=None):
+        if template:
+            users = users or User.objects.filter(is_active=True).exclude(
+                id__in=self.filter(template=template).values("user_id")
+            )
+            for user in users:
+                self.get_or_create(user=user, template=template)
+
+
+class UserSurvey(TimeStampedModel):
+    user_attribute = "user"
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+
+    template = models.ForeignKey(SurveyTemplate, on_delete=models.CASCADE)
+    result = models.JSONField(null=True, blank=True)
+    objects = UserSurveyManager()
+
+    def pretty_results(self):
+        @dataclass
+        class ResultEntry:
+            step_id: str
+            question: str
+            answer: str
+            answer_full: Any
+
+        results = []
+        if self.result:
+            questions = {
+                q["stepIdentifier"]["id"]: q["title"]
+                for q in self.template.task["steps"]
+            }
+
+            for result in self.result["results"]:
+                try:
+                    res = result["results"][0]["result"]
+                    answer_full = res
+                    if isinstance(res, list) and len(res) == 1:
+                        res = res[0]
+
+                    if (
+                        isinstance(res, dict)
+                        and len(res) == 2
+                        and "text" in res
+                        and "value" in res
+                        and res["text"] == res["value"]
+                    ):
+                        res = res["value"]
+
+                    step_id = result["id"]["id"]
+                    if step_id in questions:
+                        results.append(
+                            ResultEntry(
+                                step_id=step_id,
+                                question=questions[step_id],
+                                answer=res,
+                                answer_full=answer_full,
+                            )
+                        )
+                except LookupError:
+                    pass
+        return results
+
+    def save(self, *args, **kwargs):
+        if self.result is not None:
+            self.to_digest = True
         super().save(*args, **kwargs)
 
-        if is_new:
-            for step in self.survey.steps.all():
-                UserSurveyStep.objects.create(step=step, user_survey=self)
+    def __str__(self):
+        return f"{self.user} - {self.template}"
 
-    # class Event(models.TextChoices):
-    #     STARTED = "started"
-    #     ABORTED = "aborted"
-    #     PAUSED = "paused"
-    #     COMPLETED = "completed"
-    #
-    # events = ModelEvents(choices=Event.choices)
-
-
-# class UserSurveyEvent(models.Model):
-#     at = models.DateTimeField(auto_now_add=True)
-#     event = models.CharField(max_length=10, choices=UserSurvey.Event.choices)
-#     user = models.ForeignKey(User, on_delete=models.CASCADE)
-#     user_survey = models.ForeignKey(UserSurvey, on_delete=models.CASCADE)
-
-
-class UserSurveyStep(models.Model):
-    step = models.ForeignKey(Step, on_delete=models.CASCADE)
-    user_survey = models.ForeignKey(
-        UserSurvey, on_delete=models.CASCADE, related_name="steps"
-    )
-    response = models.JSONField(null=True, blank=True)
-
-    def __str__(self) -> str:
-        return f"{self.user_survey} - {self.step}"
+    class Meta:
+        ordering = ["-modified"]

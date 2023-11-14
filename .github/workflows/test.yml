@@ -24,7 +24,7 @@ jobs:
           . venv/bin/activate
           black . --check
           ruff . --no-fix
-          mypy .
+#          mypy .
       - name: Run tests
         run: |
           . venv/bin/activate

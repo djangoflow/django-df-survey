@@ -32,6 +32,7 @@ INSTALLED_APPS = [
     "django.contrib.sites",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "jsoneditor",
     *DF_API_DRF_INSTALLED_APPS,
     *DF_SURVEY_INSTALLED_APPS,
     "tests.test_app.apps.TestAppConfig",

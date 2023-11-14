@@ -27,6 +27,9 @@ dependencies = [
     "django-df-api-drf>=1.0.0",
     "Pillow",
     "django-hashid-field",
+    "django-model-utils",
+    "django-admin-relation-links",
+    "django-jsoneditor",
 ]
 
 [project.optional-dependencies]
