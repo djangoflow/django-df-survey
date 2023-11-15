@@ -53,6 +53,10 @@ def validate_task_json(json):
         if errors:
             raise exceptions.ValidationError(errors)
 
+class SurveyTemplateQuestion(models.Model):
+    surveytemplate =
+    surveyquestion =
+    sequence =
 
 class SurveyTemplate(models.Model):
     title = models.CharField(max_length=128)
@@ -64,7 +68,10 @@ class SurveyTemplate(models.Model):
         SurveyCategory, on_delete=models.SET_NULL, null=True, blank=True
     )
     task = models.JSONField(validators=[validate_task_json])
+    questions = models.ManyToManyField(SurveyQuestion, through=SurveyTemplateQuestion)
 
+    def generate_task_from_questions(self):
+        pass
 
 class UserSurveyManager(models.Manager):
     def get_queryset(self):
@@ -142,3 +149,15 @@ class UserSurvey(TimeStampedModel):
 
     class Meta:
         ordering = ["-modified"]
+
+
+class SurveyQuestion(models.Model):
+    question = models.TextField()
+    options = models.CharField() # str, int, float, csv of options
+
+
+class UserSurveyResponse(models.Model):
+    usersurvey = models.ForeignKey(UserSurvey)
+    question = models.ForeignKey(SurveyQuestion)
+    response = models.CharField()
+
