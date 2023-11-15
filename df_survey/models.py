@@ -152,11 +152,13 @@ class UserSurvey(TimeStampedModel):
 
 
 class SurveyQuestion(models.Model):
+    # TODO csv importer
     question = models.TextField()
     options = models.CharField() # str, int, float, csv of options
 
 
 class UserSurveyResponse(models.Model):
+    # TODO csv exporter
     usersurvey = models.ForeignKey(UserSurvey)
     question = models.ForeignKey(SurveyQuestion)
     response = models.CharField()
