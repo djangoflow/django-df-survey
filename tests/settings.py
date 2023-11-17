@@ -33,6 +33,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "jsoneditor",
+    "import_export",
     *DF_API_DRF_INSTALLED_APPS,
     *DF_SURVEY_INSTALLED_APPS,
     "tests.test_app.apps.TestAppConfig",

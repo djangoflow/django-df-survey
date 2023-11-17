@@ -30,6 +30,7 @@ dependencies = [
     "django-model-utils",
     "django-admin-relation-links",
     "django-jsoneditor",
+    "django-import-export",
 ]
 
 [project.optional-dependencies]

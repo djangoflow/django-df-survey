@@ -4,6 +4,9 @@ from typing import TYPE_CHECKING, Any
 from django.contrib.auth import get_user_model
 from django.core import exceptions
 from django.db import models
+from django.db.models.signals import pre_save
+from django.dispatch import receiver
+from django.utils.text import slugify
 from model_utils.models import TimeStampedModel
 
 if TYPE_CHECKING:
@@ -53,10 +56,14 @@ def validate_task_json(json):
         if errors:
             raise exceptions.ValidationError(errors)
 
+
 class SurveyTemplateQuestion(models.Model):
-    surveytemplate =
-    surveyquestion =
-    sequence =
+    surveytemplate = models.ForeignKey("SurveyTemplate", on_delete=models.CASCADE)
+    surveyquestion = models.ForeignKey("SurveyQuestion", on_delete=models.CASCADE)
+    sequence = models.PositiveSmallIntegerField(
+        help_text="Display sequence, lower means first", default=1000
+    )
+
 
 class SurveyTemplate(models.Model):
     title = models.CharField(max_length=128)
@@ -67,11 +74,69 @@ class SurveyTemplate(models.Model):
     category = models.ForeignKey(
         SurveyCategory, on_delete=models.SET_NULL, null=True, blank=True
     )
-    task = models.JSONField(validators=[validate_task_json])
-    questions = models.ManyToManyField(SurveyQuestion, through=SurveyTemplateQuestion)
+    task = models.JSONField(validators=[validate_task_json], null=True, blank=True)
+    questions = models.ManyToManyField("SurveyQuestion", through=SurveyTemplateQuestion)
 
-    def generate_task_from_questions(self):
-        pass
+    def generate_task_from_questions(self):  # noqa: C901
+        steps = []
+        for question in self.questions.all():
+            if question.type == "text":
+                fmt = {
+                    "type": "text",
+                }
+            elif question.type == "integer":
+                fmt = {
+                    "type": "integer",
+                }
+                if question.validators.get("max", False):
+                    fmt["maximumValue"] = question.validators["max"]
+                if question.validators.get("min", False):
+                    fmt["minimumValue"] = question.validators["min"]
+            elif question.type == "date":
+                fmt = {
+                    "type": "date",
+                }
+                if question.validators.get("max", False):
+                    fmt["maxDate"] = question.validators["max"]
+                if question.validators.get("min", False):
+                    fmt["minDate"] = question.validators["min"]
+            elif question.type == "options":
+                choices = question.validators.get("options", [])
+                selection_limit = question.validators.get("max", 1)
+                if selection_limit == 1:
+                    fmt = {
+                        "type": "single",
+                        "otherField": False,
+                        "choices": choices,
+                    }
+                else:
+                    fmt = {
+                        "type": "multiple",
+                        "otherField": False,
+                        "choices": choices,
+                        "selectionLimit": selection_limit,
+                    }
+
+            else:
+                raise exceptions.ValidationError(
+                    f"Invalid question type '{question.type}'"
+                )
+            steps.append(
+                {
+                    "type": "question",
+                    "title": question.question,
+                    "answerFormat": fmt,
+                    "stepIdentifier": {"id": slugify(question.question)},
+                }
+            )
+
+        return {
+            "id": slugify(self.title),
+            "type": "navigable",
+            "rules": [],
+            "steps": steps,
+        }
+
 
 class UserSurveyManager(models.Manager):
     def get_queryset(self):
@@ -152,14 +217,28 @@ class UserSurvey(TimeStampedModel):
 
 
 class SurveyQuestion(models.Model):
-    # TODO csv importer
-    question = models.TextField()
-    options = models.CharField() # str, int, float, csv of options
+    class Type(models.TextChoices):
+        text = "text", "Text"
+        integer = "integer", "Integer"
+        date = "date", "Date"
+        options = "options", "Options"
+
+    question = models.CharField(unique=True, max_length=255)
+    type = models.CharField(choices=Type.choices, max_length=255)
+    validators = models.JSONField(default=dict, blank=True)
+
+    def __str__(self):
+        return self.question
 
 
 class UserSurveyResponse(models.Model):
     # TODO csv exporter
-    usersurvey = models.ForeignKey(UserSurvey)
-    question = models.ForeignKey(SurveyQuestion)
-    response = models.CharField()
+    survey = models.ForeignKey(UserSurvey, on_delete=models.CASCADE)
+    question = models.ForeignKey(SurveyQuestion, on_delete=models.CASCADE)
+    response = models.TextField()
 
+
+@receiver(pre_save, sender=SurveyTemplate)
+def generate_task_from_questions(sender, instance, **kwargs):
+    if not instance.task:
+        instance.generate_task_from_questions()
