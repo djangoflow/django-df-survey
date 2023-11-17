@@ -135,7 +135,7 @@ class SurveyTemplate(models.Model):
     def responses_matrix(self):
         questions = list(self.questions.all())
         responses = []
-        responses.append(["ID", "User", "Date", *[q.slug for q in questions]])
+        responses.append(["ID", "User", "Date", *[q.question for q in questions]])
 
         for user_survey in self.usersurvey_set.prefetch_related(
             "usersurveyresponse_set"
