@@ -14,7 +14,7 @@ class HashIdWidget(Widget):
         return str(value)
 
 
-class ValidatorsWidget(Widget):
+class SurveyQuestionFormatWidget(Widget):
     def render(self, value, obj=None):
         return json.dumps(value)
 
@@ -26,23 +26,27 @@ class ValidatorsWidget(Widget):
             return json.loads(value)
 
         result = {}
-        for part in value.split(";"):
-            key, val = part.split(":")
-            if "," in val:
-                val = [v.strip() for v in val.split(",")]
-            else:
-                val = val.strip()
-            result[key.strip()] = val
+        if ".." in value:
+            mn, mx = value.split("..")
+            result.update(
+                {
+                    "min": mn.strip(),
+                    "max": mx.strip(),
+                }
+            )
+        elif ";" in value:
+            result["options"] = [v.strip() for v in value.split(";")]
+
         return result
 
 
 class SurveyQuestionResource(ModelResource):
     id = fields.Field(column_name="id", attribute="id", widget=HashIdWidget())
-    validators = fields.Field(
-        column_name="validators", attribute="validators", widget=ValidatorsWidget()
+    format = fields.Field(
+        column_name="format", attribute="format", widget=SurveyQuestionFormatWidget()
     )
 
     class Meta:
         model = SurveyQuestion
-        fields = ["id", "question", "type", "validators"]
+        fields = ["id", "question", "type", "format"]
         export_order = fields

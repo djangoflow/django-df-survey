@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Any
 from django.contrib.auth import get_user_model
 from django.core import exceptions
 from django.db import models
-from django.db.models.signals import pre_save
+from django.db.models.signals import post_save, pre_save
 from django.dispatch import receiver
 from django.utils.text import slugify
 from model_utils.models import TimeStampedModel
@@ -88,35 +88,30 @@ class SurveyTemplate(models.Model):
                 fmt = {
                     "type": "integer",
                 }
-                if question.validators.get("max", False):
-                    fmt["maximumValue"] = question.validators["max"]
-                if question.validators.get("min", False):
-                    fmt["minimumValue"] = question.validators["min"]
+                if question.format.get("max", False):
+                    fmt["maximumValue"] = question.format["max"]
+                if question.format.get("min", False):
+                    fmt["minimumValue"] = question.format["min"]
             elif question.type == "date":
                 fmt = {
                     "type": "date",
                 }
-                if question.validators.get("max", False):
-                    fmt["maxDate"] = question.validators["max"]
-                if question.validators.get("min", False):
-                    fmt["minDate"] = question.validators["min"]
-            elif question.type == "options":
-                choices = question.validators.get("options", [])
-                selection_limit = question.validators.get("max", 1)
-                if selection_limit == 1:
-                    fmt = {
-                        "type": "single",
-                        "otherField": False,
-                        "choices": choices,
-                    }
-                else:
-                    fmt = {
-                        "type": "multiple",
-                        "otherField": False,
-                        "choices": choices,
-                        "selectionLimit": selection_limit,
-                    }
-
+                if question.format.get("max", False):
+                    fmt["maxDate"] = question.format["max"]
+                if question.format.get("min", False):
+                    fmt["minDate"] = question.format["min"]
+            elif question.type == "singlechoice":
+                fmt = {
+                    "type": "single",
+                    "otherField": False,
+                    "choices": question.format.get("options", []),
+                }
+            elif question.type == "multichoice":
+                fmt = {
+                    "type": "multiple",
+                    "otherField": False,
+                    "choices": question.format.get("options", []),
+                }
             else:
                 raise exceptions.ValidationError(
                     f"Invalid question type '{question.type}'"
@@ -126,16 +121,39 @@ class SurveyTemplate(models.Model):
                     "type": "question",
                     "title": question.question,
                     "answerFormat": fmt,
-                    "stepIdentifier": {"id": slugify(question.question)},
+                    "stepIdentifier": {"id": question.slug},
                 }
             )
 
-        return {
+        self.task = {
             "id": slugify(self.title),
             "type": "navigable",
             "rules": [],
             "steps": steps,
         }
+
+    def responses_matrix(self):
+        questions = list(self.questions.all())
+        responses = []
+        responses.append(["ID", "User", "Date", *[q.slug for q in questions]])
+
+        for user_survey in self.usersurvey_set.prefetch_related(
+            "usersurveyresponse_set"
+        ).all():
+            assert isinstance(user_survey, UserSurvey)
+            survey_responses = {
+                sr.question_id: sr.response
+                for sr in user_survey.usersurveyresponse_set.all()
+            }
+            responses.append(
+                [
+                    str(user_survey.id),
+                    str(user_survey.user),
+                    user_survey.created.isoformat(),
+                    *[survey_responses.get(q.id, "") for q in questions],
+                ]
+            )
+        return responses
 
 
 class UserSurveyManager(models.Manager):
@@ -190,6 +208,12 @@ class UserSurvey(TimeStampedModel):
                     ):
                         res = res["value"]
 
+                    if isinstance(res, list) and all(
+                        isinstance(r, dict) and r.get("text") and r.get("value")
+                        for r in res
+                    ):
+                        res = ", ".join([r["value"] for r in res])
+
                     step_id = result["id"]["id"]
                     if step_id in questions:
                         results.append(
@@ -209,6 +233,9 @@ class UserSurvey(TimeStampedModel):
             self.to_digest = True
         super().save(*args, **kwargs)
 
+    def parse_survey_response(self):
+        ...
+
     def __str__(self):
         return f"{self.user} - {self.template}"
 
@@ -221,11 +248,16 @@ class SurveyQuestion(models.Model):
         text = "text", "Text"
         integer = "integer", "Integer"
         date = "date", "Date"
-        options = "options", "Options"
+        singlechoice = "singlechoice", "Choice"
+        multichoice = "multichoice", "Multichoice"
 
     question = models.CharField(unique=True, max_length=255)
     type = models.CharField(choices=Type.choices, max_length=255)
-    validators = models.JSONField(default=dict, blank=True)
+    format = models.JSONField(default=dict, blank=True)
+
+    @property
+    def slug(self):
+        return slugify(self.question)
 
     def __str__(self):
         return self.question
@@ -242,3 +274,16 @@ class UserSurveyResponse(models.Model):
 def generate_task_from_questions(sender, instance, **kwargs):
     if not instance.task:
         instance.generate_task_from_questions()
+
+
+@receiver(post_save, sender=UserSurvey)
+def parse_survey_response(sender, instance: UserSurvey, created, **kwargs):
+    if instance.result and not instance.usersurveyresponse_set.exists():
+        questions = {q.slug: q for q in instance.template.questions.all()}
+        for result in instance.pretty_results():
+            if result.step_id in questions:
+                UserSurveyResponse.objects.create(
+                    survey=instance,
+                    question=questions[result.step_id],
+                    response=result.answer,
+                )
