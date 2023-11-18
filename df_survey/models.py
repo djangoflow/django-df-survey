@@ -103,6 +103,9 @@ class Template(models.Model):
             )
         return responses
 
+    def __str__(self):
+        return f"{self.id}: {self.title}"
+
 
 class SurveyManager(models.Manager):
     def get_queryset(self):
