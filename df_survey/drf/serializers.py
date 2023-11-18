@@ -5,10 +5,10 @@ from drf_spectacular.utils import extend_schema_field
 from hashid_field.rest import HashidSerializerCharField
 from rest_framework import serializers
 
-from ..models import UserSurvey
+from ..models import Survey
 
 
-class UserSurveySerializer(serializers.ModelSerializer):
+class SurveySerializer(serializers.ModelSerializer):
     id = HashidSerializerCharField(read_only=True)
     title = serializers.CharField(source="template.title", read_only=True)
     category = serializers.CharField(source="template.category.title", read_only=True)
@@ -26,7 +26,7 @@ class UserSurveySerializer(serializers.ModelSerializer):
         return attrs
 
     class Meta:
-        model = UserSurvey
+        model = Survey
         read_only_fields = ("created", "modified")
         fields = read_only_fields + (
             "id",
@@ -39,7 +39,7 @@ class UserSurveySerializer(serializers.ModelSerializer):
         )
 
 
-class UserSurveyDetailsSerializer(UserSurveySerializer):
+class SurveyDetailsSerializer(SurveySerializer):
     task = serializers.SerializerMethodField("get_task")
     result = serializers.JSONField(required=False)
 
@@ -48,11 +48,11 @@ class UserSurveyDetailsSerializer(UserSurveySerializer):
         attrs["user"] = self.context["request"].user
         return attrs
 
-    class Meta(UserSurveySerializer.Meta):
-        fields = (*UserSurveySerializer.Meta.fields, "task", "result")
+    class Meta(SurveySerializer.Meta):
+        fields = (*SurveySerializer.Meta.fields, "task", "result")
 
     @extend_schema_field(serializers.JSONField)
-    def get_task(self, obj: UserSurvey):
+    def get_task(self, obj: Survey):
         template = Template(json.dumps(obj.template.task))
         task_str = template.render(Context({"user": obj.user}))
         task = json.loads(task_str)

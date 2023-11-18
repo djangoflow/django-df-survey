@@ -1,13 +1,18 @@
+# 1. There is no point prepending Survey to every model as this is the app name
+# 2. Quite a few anti-patterns spotted
+
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from django.contrib.auth import get_user_model
 from django.core import exceptions
 from django.db import models
-from django.db.models.signals import post_save, pre_save
+from django.db.models.signals import m2m_changed, post_save
 from django.dispatch import receiver
 from django.utils.text import slugify
 from model_utils.models import TimeStampedModel
+
+from df_survey.renderers import SurveyKitRenderer
 
 if TYPE_CHECKING:
     from django.contrib.auth.models import User
@@ -15,7 +20,7 @@ else:
     User = get_user_model()
 
 
-class SurveyCategory(models.Model):
+class Category(models.Model):
     slug = models.CharField(max_length=128)
 
     def __str__(self):
@@ -57,106 +62,49 @@ def validate_task_json(json):
             raise exceptions.ValidationError(errors)
 
 
-class SurveyTemplateQuestion(models.Model):
-    surveytemplate = models.ForeignKey("SurveyTemplate", on_delete=models.CASCADE)
-    surveyquestion = models.ForeignKey("SurveyQuestion", on_delete=models.CASCADE)
+class TemplateQuestion(models.Model):
+    template = models.ForeignKey("Template", on_delete=models.CASCADE)
+    question = models.ForeignKey("Question", on_delete=models.CASCADE)
     sequence = models.PositiveSmallIntegerField(
         help_text="Display sequence, lower means first", default=1000
     )
 
 
-class SurveyTemplate(models.Model):
+class Template(models.Model):
     title = models.CharField(max_length=128)
     description = models.TextField(null=True, blank=True)
     sequence = models.PositiveSmallIntegerField(
         help_text="Display sequence, lower means first", default=1000
     )
     category = models.ForeignKey(
-        SurveyCategory, on_delete=models.SET_NULL, null=True, blank=True
+        Category, on_delete=models.SET_NULL, null=True, blank=True
     )
     task = models.JSONField(validators=[validate_task_json], null=True, blank=True)
-    questions = models.ManyToManyField("SurveyQuestion", through=SurveyTemplateQuestion)
-
-    def generate_task_from_questions(self):  # noqa: C901
-        steps = []
-        for question in self.questions.all():
-            if question.type == "text":
-                fmt = {
-                    "type": "text",
-                }
-            elif question.type == "integer":
-                fmt = {
-                    "type": "integer",
-                }
-                if question.format.get("max", False):
-                    fmt["maximumValue"] = question.format["max"]
-                if question.format.get("min", False):
-                    fmt["minimumValue"] = question.format["min"]
-            elif question.type == "date":
-                fmt = {
-                    "type": "date",
-                }
-                if question.format.get("max", False):
-                    fmt["maxDate"] = question.format["max"]
-                if question.format.get("min", False):
-                    fmt["minDate"] = question.format["min"]
-            elif question.type == "singlechoice":
-                fmt = {
-                    "type": "single",
-                    "otherField": False,
-                    "choices": question.format.get("options", []),
-                }
-            elif question.type == "multichoice":
-                fmt = {
-                    "type": "multiple",
-                    "otherField": False,
-                    "choices": question.format.get("options", []),
-                }
-            else:
-                raise exceptions.ValidationError(
-                    f"Invalid question type '{question.type}'"
-                )
-            steps.append(
-                {
-                    "type": "question",
-                    "title": question.question,
-                    "answerFormat": fmt,
-                    "stepIdentifier": {"id": question.slug},
-                }
-            )
-
-        self.task = {
-            "id": slugify(self.title),
-            "type": "navigable",
-            "rules": [],
-            "steps": steps,
-        }
+    questions = models.ManyToManyField("Question", through=TemplateQuestion)
 
     def responses_matrix(self):
         questions = list(self.questions.all())
         responses = []
+        # TODO: This seems like an anti pattern, what are you doing here?
         responses.append(["ID", "User", "Date", *[q.question for q in questions]])
 
-        for user_survey in self.usersurvey_set.prefetch_related(
-            "usersurveyresponse_set"
-        ).all():
-            assert isinstance(user_survey, UserSurvey)
+        for survey in self.survey_set.prefetch_related("response_set").all():
+            assert isinstance(survey, Survey)
             survey_responses = {
-                sr.question_id: sr.response
-                for sr in user_survey.usersurveyresponse_set.all()
+                sr.question_id: sr.response for sr in survey.response_set.all()
             }
             responses.append(
                 [
-                    str(user_survey.id),
-                    str(user_survey.user),
-                    user_survey.created.isoformat(),
+                    str(survey.id),
+                    str(survey.user),
+                    survey.created.isoformat(),
                     *[survey_responses.get(q.id, "") for q in questions],
                 ]
             )
         return responses
 
 
-class UserSurveyManager(models.Manager):
+class SurveyManager(models.Manager):
     def get_queryset(self):
         return super().get_queryset().select_related("template", "template__category")
 
@@ -169,13 +117,13 @@ class UserSurveyManager(models.Manager):
                 self.get_or_create(user=user, template=template)
 
 
-class UserSurvey(TimeStampedModel):
+class Survey(TimeStampedModel):
     user_attribute = "user"
     user = models.ForeignKey(User, on_delete=models.CASCADE)
 
-    template = models.ForeignKey(SurveyTemplate, on_delete=models.CASCADE)
+    template = models.ForeignKey(Template, on_delete=models.CASCADE)
     result = models.JSONField(null=True, blank=True)
-    objects = UserSurveyManager()
+    objects = SurveyManager()
 
     def pretty_results(self):
         @dataclass
@@ -243,13 +191,13 @@ class UserSurvey(TimeStampedModel):
         ordering = ["-modified"]
 
 
-class SurveyQuestion(models.Model):
+class Question(models.Model):
     class Type(models.TextChoices):
         text = "text", "Text"
         integer = "integer", "Integer"
         date = "date", "Date"
-        singlechoice = "singlechoice", "Choice"
-        multichoice = "multichoice", "Multichoice"
+        single = "single", "Single choice"
+        multi = "multi", "Multiple choice"
 
     question = models.CharField(unique=True, max_length=255)
     type = models.CharField(choices=Type.choices, max_length=255)
@@ -263,26 +211,28 @@ class SurveyQuestion(models.Model):
         return self.question
 
 
-class UserSurveyResponse(models.Model):
+class Response(models.Model):
     # TODO csv exporter
-    survey = models.ForeignKey(UserSurvey, on_delete=models.CASCADE)
-    question = models.ForeignKey(SurveyQuestion, on_delete=models.CASCADE)
+    survey = models.ForeignKey(Survey, on_delete=models.CASCADE)
+    question = models.ForeignKey(Question, on_delete=models.CASCADE)
     response = models.TextField()
 
 
-@receiver(pre_save, sender=SurveyTemplate)
+@receiver(m2m_changed, sender=Template)
 def generate_task_from_questions(sender, instance, **kwargs):
-    if not instance.task:
-        instance.generate_task_from_questions()
+    if not instance.task and instance.questions.exists():
+        instance.task = SurveyKitRenderer.generate_task_from_template(instance)
+        instance.save(update_fields=["task"])
 
 
-@receiver(post_save, sender=UserSurvey)
-def parse_survey_response(sender, instance: UserSurvey, created, **kwargs):
-    if instance.result and not instance.usersurveyresponse_set.exists():
+# TODO: This would make sense if we were doing rewrites
+@receiver(post_save, sender=Survey)
+def parse_survey_response(sender, instance: Survey, created, **kwargs):
+    if instance.result and not instance.response_set.exists():
         questions = {q.slug: q for q in instance.template.questions.all()}
         for result in instance.pretty_results():
             if result.step_id in questions:
-                UserSurveyResponse.objects.create(
+                Response.objects.create(
                     survey=instance,
                     question=questions[result.step_id],
                     response=result.answer,

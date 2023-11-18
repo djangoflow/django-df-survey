@@ -4,7 +4,7 @@ from import_export import fields
 from import_export.resources import ModelResource
 from import_export.widgets import Widget
 
-from df_survey.models import SurveyQuestion
+from df_survey.models import Question
 
 
 class HashIdWidget(Widget):
@@ -14,7 +14,7 @@ class HashIdWidget(Widget):
         return str(value)
 
 
-class SurveyQuestionFormatWidget(Widget):
+class QuestionFormatWidget(Widget):
     def render(self, value, obj=None):
         return json.dumps(value)
 
@@ -40,13 +40,13 @@ class SurveyQuestionFormatWidget(Widget):
         return result
 
 
-class SurveyQuestionResource(ModelResource):
+class QuestionResource(ModelResource):
     id = fields.Field(column_name="id", attribute="id", widget=HashIdWidget())
     format = fields.Field(
-        column_name="format", attribute="format", widget=SurveyQuestionFormatWidget()
+        column_name="format", attribute="format", widget=QuestionFormatWidget()
     )
 
     class Meta:
-        model = SurveyQuestion
+        model = Question
         fields = ["id", "question", "type", "format"]
         export_order = fields

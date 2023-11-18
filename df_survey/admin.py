@@ -10,29 +10,29 @@ from import_export.admin import ImportExportMixin
 from jsoneditor.forms import JSONEditor
 
 from .models import (
-    SurveyCategory,
-    SurveyQuestion,
-    SurveyTemplate,
-    SurveyTemplateQuestion,
-    UserSurvey,
-    UserSurveyResponse,
+    Category,
+    Question,
+    Response,
+    Survey,
+    Template,
+    TemplateQuestion,
 )
-from .resources import SurveyQuestionResource
+from .resources import QuestionResource
 
 
-@admin.register(SurveyCategory)
-class SurveyCategoryAdmin(admin.ModelAdmin):
+@admin.register(Category)
+class CategoryAdmin(admin.ModelAdmin):
     list_display = ("id", "slug")
 
 
-class SurveyTemplateQuestionAdmin(admin.TabularInline):
-    model = SurveyTemplateQuestion
+class TemplateQuestionAdmin(admin.TabularInline):
+    model = TemplateQuestion
     extra = 3
 
 
-@admin.register(SurveyTemplate)
-class SurveyTemplateAdmin(admin.ModelAdmin):
-    inlines = [SurveyTemplateQuestionAdmin]
+@admin.register(Template)
+class TemplateAdmin(admin.ModelAdmin):
+    inlines = [TemplateQuestionAdmin]
     formfield_overrides = {
         JSONField: {"widget": JSONEditor},
     }
@@ -43,7 +43,7 @@ class SurveyTemplateAdmin(admin.ModelAdmin):
     def download(self, obj):
         return format_html(
             '<a href="{}" download>Download</a>',
-            reverse("admin:surveytemplate_download", args=[obj.id]),
+            reverse("admin:template_download", args=[obj.id]),
         )
 
     download.short_description = "Download Results"
@@ -54,7 +54,7 @@ class SurveyTemplateAdmin(admin.ModelAdmin):
         response[
             "Content-Disposition"
         ] = f'attachment; filename="survey_results_{survey_template_id}.xlsx"'
-        survey = get_object_or_404(SurveyTemplate, id=survey_template_id)
+        survey = get_object_or_404(Template, id=survey_template_id)
         wb = openpyxl.Workbook()
         ws = wb.active
         ws.title = "Survey Results"
@@ -70,7 +70,7 @@ class SurveyTemplateAdmin(admin.ModelAdmin):
             path(
                 "download/<str:survey_template_id>/",
                 self.admin_site.admin_view(self.download_results),
-                name="surveytemplate_download",
+                name="template_download",
             ),
         ]
         return custom_urls + urls
@@ -78,13 +78,13 @@ class SurveyTemplateAdmin(admin.ModelAdmin):
     @admin.action(description="Assign this survey to all users")
     def create_for_all_users(self, request, queryset):
         for template in queryset:
-            UserSurvey.objects.create_for_users(template=template, users=None)
+            Survey.objects.create_for_users(template=template, users=None)
 
     actions = [create_for_all_users]
 
 
-@admin.register(UserSurvey)
-class UserSurveyAdmin(AdminChangeLinksMixin, admin.ModelAdmin):
+@admin.register(Survey)
+class SurveyAdmin(AdminChangeLinksMixin, admin.ModelAdmin):
     formfield_overrides = {
         JSONField: {"widget": JSONEditor},
     }
@@ -104,15 +104,15 @@ class UserSurveyAdmin(AdminChangeLinksMixin, admin.ModelAdmin):
     search_fields = ("user__email", "template__title")
 
 
-@admin.register(SurveyQuestion)
-class SurveyQuestionAdmin(ImportExportMixin, admin.ModelAdmin):
-    resource_class = SurveyQuestionResource
+@admin.register(Question)
+class QuestionAdmin(ImportExportMixin, admin.ModelAdmin):
+    resource_class = QuestionResource
     list_display = ("question", "type", "format")
     search_fields = ("question",)
     list_filter = ("type",)
 
 
-@admin.register(UserSurveyResponse)
-class UserSurveyResponseAdmin(admin.ModelAdmin):
+@admin.register(Response)
+class SurveyResponseAdmin(admin.ModelAdmin):
     list_display = ("survey", "question", "response")
     autocomplete_fields = ("survey", "question")
