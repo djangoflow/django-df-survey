@@ -11,6 +11,8 @@ from jsoneditor.forms import JSONEditor
 
 from .models import (
     Category,
+    Question,
+    Response,
     Survey,
     Template,
     TemplateQuestion,
