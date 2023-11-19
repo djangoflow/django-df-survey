@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any
 from django.contrib.auth import get_user_model
 from django.core import exceptions
 from django.db import models
+from django.db.models import OuterRef, Subquery
 from django.db.models.signals import m2m_changed, post_save
 from django.dispatch import receiver
 from django.utils.text import slugify
@@ -82,6 +83,30 @@ class Template(models.Model):
     task = models.JSONField(validators=[validate_task_json], null=True, blank=True)
     questions = models.ManyToManyField("Question", through=TemplateQuestion)
 
+    def get_responses(self):
+        qs = self.questions.all()
+        users = (
+            Response.objects.filter(survey__template=self)
+            .values_list("survey__user__email", flat=True)
+            .distinct()
+        )
+
+        for user in users:
+            qs = qs.annotate(
+                **{
+                    user: Subquery(
+                        queryset=Response.objects.filter(
+                            question_id=OuterRef("pk"),
+                            survey__template=self,
+                            survey__user__email=user,
+                        ).values_list("response")[:1]
+                    )
+                }
+            )
+        responses = [["Question", *users], list(qs.values_list("question", *users))]
+        return responses
+
+    # TODO: eugapx name methods as verbs
     def responses_matrix(self):
         questions = list(self.questions.all())
         responses = []
@@ -204,6 +229,11 @@ class Question(models.Model):
 
     question = models.CharField(unique=True, max_length=255)
     type = models.CharField(choices=Type.choices, max_length=255)
+    # TODO:
+    # format should understand simple formats
+    # min..max for numbers, e.g. 0..100
+    # minLengh..maxLength for strings, e.g. 0..500
+    # red|green|blue - choices
     format = models.JSONField(default=dict, blank=True)
 
     @property
