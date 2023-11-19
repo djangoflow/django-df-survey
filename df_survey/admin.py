@@ -48,6 +48,7 @@ class TemplateAdmin(admin.ModelAdmin):
 
     download.short_description = "Download Results"
 
+    # TODO: (eugapx) This has to be implemented via importexport
     def download_results(self, request, survey_template_id):
         # Logic to generate and return XLSX file
         response = HttpResponse(content_type="application/vnd.ms-excel")
