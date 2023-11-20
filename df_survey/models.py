@@ -8,7 +8,7 @@ from django.contrib.auth import get_user_model
 from django.core import exceptions
 from django.db import models
 from django.db.models import OuterRef, Subquery
-from django.db.models.signals import post_save, pre_save
+from django.db.models.signals import m2m_changed, post_save
 from django.dispatch import receiver
 from django.utils.text import slugify
 from model_utils.models import TimeStampedModel
@@ -251,7 +251,8 @@ class Response(models.Model):
 
 # TODO: I left this as pre_save because we cannot hande it in m2m_changed
 # Because it fires for every m2m entry. So the method will be called many times
-@receiver(pre_save, sender=Survey)
+# that is not a problem because if instance.task is non null we will not touch it
+@receiver(m2m_changed, sender=Survey)
 def generate_task_from_questions(sender, instance, **kwargs):
     if not instance.task and instance.questions.exists():
         instance.task = SurveyKitRenderer.generate_task_from_survey(instance)
