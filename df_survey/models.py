@@ -7,7 +7,8 @@ from typing import TYPE_CHECKING, Any
 from django.contrib.auth import get_user_model
 from django.core import exceptions
 from django.db import models
-from django.db.models import OuterRef, Subquery
+from django.db.models import OuterRef, Subquery, Value
+from django.db.models.functions import Coalesce
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from model_utils.models import TimeStampedModel
@@ -92,45 +93,27 @@ class Survey(models.Model):
     def get_responses(self):
         qs = self.questions.all()
         users = (
-            Response.objects.filter(survey__template=self)
-            .values_list("survey__user__email", flat=True)
+            Response.objects.filter(usersurvey__survey=self)
+            .values_list("usersurvey__user__email", flat=True)
             .distinct()
         )
 
         for user in users:
             qs = qs.annotate(
                 **{
-                    user: Subquery(
-                        queryset=Response.objects.filter(
-                            question_id=OuterRef("pk"),
-                            survey__template=self,
-                            survey__user__email=user,
-                        ).values_list("response")[:1]
+                    user: Coalesce(
+                        Subquery(
+                            queryset=Response.objects.filter(
+                                question_id=OuterRef("pk"),
+                                usersurvey__survey=self,
+                                usersurvey__user__email=user,
+                            ).values_list("response")[:1]
+                        ),
+                        Value("", output_field=models.TextField()),
                     )
                 }
             )
-        responses = [["Question", *users], list(qs.values_list("question", *users))]
-        return responses
-
-    def get_responses_matrix(self):
-        questions = list(self.questions.all())
-        responses = []
-        # TODO: This seems like an anti pattern, what are you doing here?
-        responses.append(["ID", "User", "Date", *[q.question for q in questions]])
-
-        for survey in self.survey_set.prefetch_related("response_set").all():
-            assert isinstance(survey, UserSurvey)
-            survey_responses = {
-                sr.question_id: sr.response for sr in survey.response_set.all()
-            }
-            responses.append(
-                [
-                    str(survey.id),
-                    str(survey.user),
-                    survey.created.isoformat(),
-                    *[survey_responses.get(q.id, "") for q in questions],
-                ]
-            )
+        responses = [["Question", *users], *(qs.values_list("question", *users))]
         return responses
 
     def __str__(self):
@@ -214,7 +197,14 @@ class UserSurvey(TimeStampedModel):
         super().save(*args, **kwargs)
 
     def parse_survey_response(self):
-        ...
+        questions = {q.id: q for q in self.survey.questions.all()}
+        for result in self.pretty_results():
+            if result.step_id in questions:
+                Response.objects.create(
+                    usersurvey=self,
+                    question=questions[result.step_id],
+                    response=result.answer,
+                )
 
     def __str__(self):
         return f"{self.user} - {self.survey}"
@@ -255,11 +245,4 @@ class Response(models.Model):
 @receiver(post_save, sender=UserSurvey)
 def parse_survey_response(sender, instance: UserSurvey, created, **kwargs):
     if instance.result and not instance.response_set.exists():
-        questions = {q.id: q for q in instance.survey.questions.all()}
-        for result in instance.pretty_results():
-            if result.step_id in questions:
-                Response.objects.create(
-                    usersurvey=instance,
-                    question=questions[result.step_id],
-                    response=result.answer,
-                )
+        instance.parse_survey_response()

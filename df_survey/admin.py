@@ -87,7 +87,7 @@ class SurveyAdmin(admin.ModelAdmin):
         wb = openpyxl.Workbook()
         ws = wb.active
         ws.title = "Survey Results"
-        for row in survey.get_responses_matrix():
+        for row in survey.get_responses():
             ws.append(row)
 
         wb.save(response)
@@ -136,6 +136,12 @@ class UserSurveyAdmin(AdminChangeLinksMixin, admin.ModelAdmin):
         ("result", admin.EmptyFieldListFilter),
     )
     search_fields = ("user__email", "survey__title")
+
+    def parse_survey_response(self, request, queryset):
+        for user_survey in queryset:
+            user_survey.parse_survey_response()
+
+    actions = [parse_survey_response]
 
 
 @admin.register(Question)
