@@ -10,6 +10,6 @@ if settings.DEBUG:
 else:
     router = SimpleRouter()
 
-router.register("user_surveys", SurveyViewSet, basename="user_surveys")
+router.register("user-surveys", SurveyViewSet, basename="user-surveys")
 
 urlpatterns += router.urls
