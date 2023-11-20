@@ -33,16 +33,11 @@ class SurveyQuestionAdmin(admin.TabularInline):
 
 
 class SurveyAdminForm(forms.ModelForm):
-    questions_file = forms.FileField()
+    questions_file = forms.FileField(required=False)
 
     class Meta:
         model = Survey
         fields = "__all__"
-
-    def __init__(self, *args, **kwargs):
-        super(SurveyAdminForm, self).__init__(*args, **kwargs)
-        if self.instance.pk:
-            self.fields.pop("questions_file")
 
     def save(self, commit=True):
         survey = super().save(commit)
@@ -51,14 +46,11 @@ class SurveyAdminForm(forms.ModelForm):
             dataset = tablib.Dataset()
             dataset.load(survey_file.read())
             question_resource = QuestionResource()
-            question_resource.import_data(dataset, dry_run=False)
-
-            # for question in questions:
-            #     Assuming 'question' is an instance of the Question model
-            #     row_result = question_resource.import_row(question, dry_run=False)
-            #
-            # question.save()
-            # SurveyQuestion.objects.create(survey=survey, question=question)
+            rows = question_resource.import_data(dataset, dry_run=False)
+            for idx, row in enumerate(rows):
+                SurveyQuestion.objects.create(
+                    survey=survey, question_id=row.object_id, sequence=idx + 1
+                )
 
         return survey
 
