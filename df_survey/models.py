@@ -63,15 +63,15 @@ def validate_task_json(json):
             raise exceptions.ValidationError(errors)
 
 
-class TemplateQuestion(models.Model):
-    template = models.ForeignKey("Template", on_delete=models.CASCADE)
+class SurveyQuestion(models.Model):
+    survey = models.ForeignKey("Survey", on_delete=models.CASCADE)
     question = models.ForeignKey("Question", on_delete=models.CASCADE)
     sequence = models.PositiveSmallIntegerField(
         help_text="Display sequence, lower means first", default=1000
     )
 
 
-class Template(models.Model):
+class Survey(models.Model):
     title = models.CharField(max_length=128)
     description = models.TextField(null=True, blank=True)
     sequence = models.PositiveSmallIntegerField(
@@ -81,7 +81,7 @@ class Template(models.Model):
         Category, on_delete=models.SET_NULL, null=True, blank=True
     )
     task = models.JSONField(validators=[validate_task_json], null=True, blank=True)
-    questions = models.ManyToManyField("Question", through=TemplateQuestion)
+    questions = models.ManyToManyField("Question", through=SurveyQuestion)
 
     def get_responses(self):
         qs = self.questions.all()
@@ -107,14 +107,14 @@ class Template(models.Model):
         return responses
 
     # TODO: eugapx name methods as verbs
-    def responses_matrix(self):
+    def get_responses_matrix(self):
         questions = list(self.questions.all())
         responses = []
         # TODO: This seems like an anti pattern, what are you doing here?
         responses.append(["ID", "User", "Date", *[q.question for q in questions]])
 
         for survey in self.survey_set.prefetch_related("response_set").all():
-            assert isinstance(survey, Survey)
+            assert isinstance(survey, UserSurvey)
             survey_responses = {
                 sr.question_id: sr.response for sr in survey.response_set.all()
             }
@@ -145,11 +145,11 @@ class SurveyManager(models.Manager):
                 self.get_or_create(user=user, template=template)
 
 
-class Survey(TimeStampedModel):
+class UserSurvey(TimeStampedModel):
     user_attribute = "user"
     user = models.ForeignKey(User, on_delete=models.CASCADE)
 
-    template = models.ForeignKey(Template, on_delete=models.CASCADE)
+    survey = models.ForeignKey(Survey, on_delete=models.CASCADE)
     result = models.JSONField(null=True, blank=True)
     objects = SurveyManager()
 
@@ -164,8 +164,7 @@ class Survey(TimeStampedModel):
         results = []
         if self.result:
             questions = {
-                q["stepIdentifier"]["id"]: q["title"]
-                for q in self.template.task["steps"]
+                q["stepIdentifier"]["id"]: q["title"] for q in self.survey.task["steps"]
             }
 
             for result in self.result["results"]:
@@ -213,7 +212,7 @@ class Survey(TimeStampedModel):
         ...
 
     def __str__(self):
-        return f"{self.user} - {self.template}"
+        return f"{self.user} - {self.survey}"
 
     class Meta:
         ordering = ["-modified"]
@@ -246,12 +245,12 @@ class Question(models.Model):
 
 class Response(models.Model):
     # TODO csv exporter
-    survey = models.ForeignKey(Survey, on_delete=models.CASCADE)
+    usersurvey = models.ForeignKey(UserSurvey, on_delete=models.CASCADE)
     question = models.ForeignKey(Question, on_delete=models.CASCADE)
     response = models.TextField()
 
 
-@receiver(m2m_changed, sender=Template)
+@receiver(m2m_changed, sender=Survey)
 def generate_task_from_questions(sender, instance, **kwargs):
     if not instance.task and instance.questions.exists():
         instance.task = SurveyKitRenderer.generate_task_from_template(instance)
@@ -259,10 +258,10 @@ def generate_task_from_questions(sender, instance, **kwargs):
 
 
 # TODO: This would make sense if we were doing rewrites
-@receiver(post_save, sender=Survey)
-def parse_survey_response(sender, instance: Survey, created, **kwargs):
+@receiver(post_save, sender=UserSurvey)
+def parse_survey_response(sender, instance: UserSurvey, created, **kwargs):
     if instance.result and not instance.response_set.exists():
-        questions = {q.slug: q for q in instance.template.questions.all()}
+        questions = {q.slug: q for q in instance.survey.questions.all()}
         for result in instance.pretty_results():
             if result.step_id in questions:
                 Response.objects.create(

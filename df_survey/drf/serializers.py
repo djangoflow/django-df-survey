@@ -5,18 +5,14 @@ from drf_spectacular.utils import extend_schema_field
 from hashid_field.rest import HashidSerializerCharField
 from rest_framework import serializers
 
-from ..models import Survey
+from ..models import UserSurvey
 
 
-class SurveySerializer(serializers.ModelSerializer):
+class UserSurveySerializer(serializers.ModelSerializer):
     id = HashidSerializerCharField(read_only=True)
-    title = serializers.CharField(source="template.title", read_only=True)
-    category = serializers.CharField(source="template.category.title", read_only=True)
-    is_optional = serializers.BooleanField(
-        source="template.is_optional", read_only=True
-    )
-    description = serializers.CharField(source="template.description", read_only=True)
-    version = serializers.IntegerField(source="template.version", read_only=True)
+    title = serializers.CharField(source="survey.title", read_only=True)
+    description = serializers.CharField(source="survey.description", read_only=True)
+    category = serializers.CharField(source="survey.category.slug", read_only=True)
     completed = serializers.DateTimeField(read_only=True)
 
     def to_representation(self, instance):
@@ -26,20 +22,18 @@ class SurveySerializer(serializers.ModelSerializer):
         return attrs
 
     class Meta:
-        model = Survey
+        model = UserSurvey
         read_only_fields = ("created", "modified")
         fields = read_only_fields + (
             "id",
             "title",
             "category",
             "description",
-            "is_optional",
-            "version",
             "completed",
         )
 
 
-class SurveyDetailsSerializer(SurveySerializer):
+class UserSurveyDetailsSerializer(UserSurveySerializer):
     task = serializers.SerializerMethodField("get_task")
     result = serializers.JSONField(required=False)
 
@@ -48,12 +42,12 @@ class SurveyDetailsSerializer(SurveySerializer):
         attrs["user"] = self.context["request"].user
         return attrs
 
-    class Meta(SurveySerializer.Meta):
-        fields = (*SurveySerializer.Meta.fields, "task", "result")
+    class Meta(UserSurveySerializer.Meta):
+        fields = (*UserSurveySerializer.Meta.fields, "task", "result")
 
     @extend_schema_field(serializers.JSONField)
-    def get_task(self, obj: Survey):
-        template = Template(json.dumps(obj.template.task))
+    def get_task(self, obj: UserSurvey):
+        template = Template(json.dumps(obj.survey.task))
         task_str = template.render(Context({"user": obj.user}))
         task = json.loads(task_str)
 

@@ -1,23 +1,23 @@
 from rest_framework import mixins
 from rest_framework.viewsets import GenericViewSet
 
-from ..models import Survey
-from .serializers import SurveyDetailsSerializer, SurveySerializer
+from ..models import UserSurvey
+from .serializers import UserSurveyDetailsSerializer, UserSurveySerializer
 
 
-class SurveyViewSet(
+class UserSurveyViewSet(
     mixins.ListModelMixin,
     mixins.UpdateModelMixin,
     mixins.RetrieveModelMixin,
     GenericViewSet,
 ):
-    serializer_class = SurveyDetailsSerializer
-    queryset = Survey.objects.all()
+    serializer_class = UserSurveyDetailsSerializer
+    queryset = UserSurvey.objects.all()
 
     def get_queryset(self):
         return self.queryset.filter(user=self.request.user)
 
     def get_serializer_class(self):
         if self.action == "list":
-            return SurveySerializer
+            return UserSurveySerializer
         return self.serializer_class

@@ -14,8 +14,8 @@ from .models import (
     Question,
     Response,
     Survey,
-    Template,
-    TemplateQuestion,
+    SurveyQuestion,
+    UserSurvey,
 )
 from .resources import QuestionResource
 
@@ -25,14 +25,14 @@ class CategoryAdmin(admin.ModelAdmin):
     list_display = ("id", "slug")
 
 
-class TemplateQuestionAdmin(admin.TabularInline):
-    model = TemplateQuestion
+class SurveyQuestionAdmin(admin.TabularInline):
+    model = SurveyQuestion
     extra = 3
 
 
-@admin.register(Template)
-class TemplateAdmin(admin.ModelAdmin):
-    inlines = [TemplateQuestionAdmin]
+@admin.register(Survey)
+class SurveyAdmin(admin.ModelAdmin):
+    inlines = [SurveyQuestionAdmin]
     formfield_overrides = {
         JSONField: {"widget": JSONEditor},
     }
@@ -55,11 +55,11 @@ class TemplateAdmin(admin.ModelAdmin):
         response[
             "Content-Disposition"
         ] = f'attachment; filename="survey_results_{survey_template_id}.xlsx"'
-        survey = get_object_or_404(Template, id=survey_template_id)
+        survey = get_object_or_404(Survey, id=survey_template_id)
         wb = openpyxl.Workbook()
         ws = wb.active
         ws.title = "Survey Results"
-        for row in survey.responses_matrix():
+        for row in survey.get_responses_matrix():
             ws.append(row)
 
         wb.save(response)
@@ -79,30 +79,30 @@ class TemplateAdmin(admin.ModelAdmin):
     @admin.action(description="Assign this survey to all users")
     def create_for_all_users(self, request, queryset):
         for template in queryset:
-            Survey.objects.create_for_users(template=template, users=None)
+            UserSurvey.objects.create_for_users(template=template, users=None)
 
     actions = [create_for_all_users]
 
 
-@admin.register(Survey)
-class SurveyAdmin(AdminChangeLinksMixin, admin.ModelAdmin):
+@admin.register(UserSurvey)
+class UserSurveyAdmin(AdminChangeLinksMixin, admin.ModelAdmin):
     formfield_overrides = {
         JSONField: {"widget": JSONEditor},
     }
 
     list_display = (
         "id",
-        "template_link",
+        "survey_link",
         "user",
         "created",
         "modified",
     )
-    change_links = ["template"]
+    change_links = ["survey"]
     list_filter = (
-        "template__category__slug",
+        "survey__category__slug",
         ("result", admin.EmptyFieldListFilter),
     )
-    search_fields = ("user__email", "template__title")
+    search_fields = ("user__email", "survey__title")
 
 
 @admin.register(Question)
@@ -114,6 +114,6 @@ class QuestionAdmin(ImportExportMixin, admin.ModelAdmin):
 
 
 @admin.register(Response)
-class SurveyResponseAdmin(admin.ModelAdmin):
-    list_display = ("survey", "question", "response")
-    autocomplete_fields = ("survey", "question")
+class ResponseAdmin(admin.ModelAdmin):
+    list_display = ("usersurvey", "question", "response")
+    autocomplete_fields = ("usersurvey", "question")
