@@ -1,4 +1,6 @@
 import openpyxl
+import tablib
+from django import forms
 from django.contrib import admin
 from django.db.models import JSONField
 from django.http import HttpResponse
@@ -30,8 +32,40 @@ class SurveyQuestionAdmin(admin.TabularInline):
     extra = 3
 
 
+class SurveyAdminForm(forms.ModelForm):
+    questions_file = forms.FileField()
+
+    class Meta:
+        model = Survey
+        fields = "__all__"
+
+    def __init__(self, *args, **kwargs):
+        super(SurveyAdminForm, self).__init__(*args, **kwargs)
+        if self.instance.pk:
+            self.fields.pop("questions_file")
+
+    def save(self, commit=True):
+        survey = super().save(commit)
+        survey_file = self.cleaned_data.get("questions_file")
+        if survey_file:
+            dataset = tablib.Dataset()
+            dataset.load(survey_file.read())
+            question_resource = QuestionResource()
+            question_resource.import_data(dataset, dry_run=False)
+
+            # for question in questions:
+            #     Assuming 'question' is an instance of the Question model
+            #     row_result = question_resource.import_row(question, dry_run=False)
+            #
+            # question.save()
+            # SurveyQuestion.objects.create(survey=survey, question=question)
+
+        return survey
+
+
 @admin.register(Survey)
 class SurveyAdmin(admin.ModelAdmin):
+    form = SurveyAdminForm
     inlines = [SurveyQuestionAdmin]
     formfield_overrides = {
         JSONField: {"widget": JSONEditor},

@@ -10,7 +10,6 @@ from django.db import models
 from django.db.models import OuterRef, Subquery
 from django.db.models.signals import m2m_changed, post_save
 from django.dispatch import receiver
-from django.utils.text import slugify
 from model_utils.models import TimeStampedModel
 
 from df_survey.renderers import SurveyKitRenderer
@@ -225,7 +224,7 @@ class Question(models.Model):
         single = "single", "Single choice"
         multi = "multi", "Multiple choice"
 
-    question = models.CharField(unique=True, max_length=255)
+    question = models.CharField(max_length=255)
     type = models.CharField(choices=Type.choices, max_length=255)
     # TODO:
     # format should understand simple formats
@@ -233,10 +232,6 @@ class Question(models.Model):
     # minLengh..maxLength for strings, e.g. 0..500
     # red|green|blue - choices
     format = models.TextField(default="", blank=True)
-
-    @property
-    def slug(self):
-        return slugify(self.question)
 
     def __str__(self):
         return self.question
