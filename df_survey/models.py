@@ -8,7 +8,7 @@ from django.contrib.auth import get_user_model
 from django.core import exceptions
 from django.db import models
 from django.db.models import OuterRef, Subquery
-from django.db.models.signals import m2m_changed, post_save
+from django.db.models.signals import post_save, pre_save
 from django.dispatch import receiver
 from django.utils.text import slugify
 from model_utils.models import TimeStampedModel
@@ -106,7 +106,6 @@ class Survey(models.Model):
         responses = [["Question", *users], list(qs.values_list("question", *users))]
         return responses
 
-    # TODO: eugapx name methods as verbs
     def get_responses_matrix(self):
         questions = list(self.questions.all())
         responses = []
@@ -132,17 +131,17 @@ class Survey(models.Model):
         return f"{self.id}: {self.title}"
 
 
-class SurveyManager(models.Manager):
+class UserSurveyManager(models.Manager):
     def get_queryset(self):
-        return super().get_queryset().select_related("template", "template__category")
+        return super().get_queryset().select_related("survey__category")
 
-    def create_for_users(self, template=None, users=None):
-        if template:
+    def create_for_users(self, survey=None, users=None):
+        if survey:
             users = users or User.objects.filter(is_active=True).exclude(
-                id__in=self.filter(template=template).values("user_id")
+                id__in=self.filter(survey=survey).values("user_id")
             )
             for user in users:
-                self.get_or_create(user=user, template=template)
+                self.get_or_create(user=user, survey=survey)
 
 
 class UserSurvey(TimeStampedModel):
@@ -151,7 +150,7 @@ class UserSurvey(TimeStampedModel):
 
     survey = models.ForeignKey(Survey, on_delete=models.CASCADE)
     result = models.JSONField(null=True, blank=True)
-    objects = SurveyManager()
+    objects = UserSurveyManager()
 
     def pretty_results(self):
         @dataclass
@@ -233,7 +232,7 @@ class Question(models.Model):
     # min..max for numbers, e.g. 0..100
     # minLengh..maxLength for strings, e.g. 0..500
     # red|green|blue - choices
-    format = models.JSONField(default=dict, blank=True)
+    format = models.TextField(default="", blank=True)
 
     @property
     def slug(self):
@@ -250,10 +249,12 @@ class Response(models.Model):
     response = models.TextField()
 
 
-@receiver(m2m_changed, sender=Survey)
+# TODO: I left this as pre_save because we cannot hande it in m2m_changed
+# Because it fires for every m2m entry. So the method will be called many times
+@receiver(pre_save, sender=Survey)
 def generate_task_from_questions(sender, instance, **kwargs):
     if not instance.task and instance.questions.exists():
-        instance.task = SurveyKitRenderer.generate_task_from_template(instance)
+        instance.task = SurveyKitRenderer.generate_task_from_survey(instance)
         instance.save(update_fields=["task"])
 
 
@@ -261,11 +262,11 @@ def generate_task_from_questions(sender, instance, **kwargs):
 @receiver(post_save, sender=UserSurvey)
 def parse_survey_response(sender, instance: UserSurvey, created, **kwargs):
     if instance.result and not instance.response_set.exists():
-        questions = {q.slug: q for q in instance.survey.questions.all()}
+        questions = {q.id: q for q in instance.survey.questions.all()}
         for result in instance.pretty_results():
             if result.step_id in questions:
                 Response.objects.create(
-                    survey=instance,
+                    usersurvey=instance,
                     question=questions[result.step_id],
                     response=result.answer,
                 )

@@ -78,8 +78,8 @@ class SurveyAdmin(admin.ModelAdmin):
 
     @admin.action(description="Assign this survey to all users")
     def create_for_all_users(self, request, queryset):
-        for template in queryset:
-            UserSurvey.objects.create_for_users(template=template, users=None)
+        for survey in queryset:
+            UserSurvey.objects.create_for_users(survey=survey, users=None)
 
     actions = [create_for_all_users]
 

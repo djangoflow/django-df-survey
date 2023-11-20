@@ -18,7 +18,7 @@ class SurveyKitRenderer(BaseRenderer):
             "defaults": {
                 "type": "integer",
             },
-            "format": {
+            "rewrites": {
                 "maximumValue": "max",
                 "minimumValue": "min",
             },
@@ -49,10 +49,24 @@ class SurveyKitRenderer(BaseRenderer):
         },
     }
 
-    @staticmethod
-    def generate_task_from_template(template):
+    @classmethod
+    def parse_format(self, fmt: str) -> dict:
+        if ".." in fmt:
+            min_, max_ = fmt.split("..")
+            return {
+                "min": min_,
+                "max": max_,
+            }
+        if "|" in fmt:
+            return {
+                "choices": fmt.split("|"),
+            }
+        return {}
+
+    @classmethod
+    def generate_task_from_survey(cls, survey):
         steps = []
-        for question in template.questions.all():
+        for question in survey.questions.all():
             try:
                 f = SurveyKitRenderer.FORMATS[question.type]
             except KeyError:
@@ -60,20 +74,25 @@ class SurveyKitRenderer(BaseRenderer):
                     f"Unrecognized question type '{question.type}'"
                 )
 
+            question_format = cls.parse_format(question.format)
             steps.append(
                 {
                     "type": "question",
                     "title": question.question,
                     "answerFormat": {
                         **f.get("defaults", {}),
-                        **{k: f.format.get(v) for k, v in f.get("rewrites", {})},
+                        **{
+                            k: question_format.get(v)
+                            for k, v in f.get("rewrites", {}).items()
+                            if v in question_format
+                        },
                     },
                     "stepIdentifier": {"id": str(question.id)},
                 }
             )
 
         return {
-            "id": str(template.id),
+            "id": str(survey.id),
             "type": "navigable",
             "rules": [],
             "steps": steps,
