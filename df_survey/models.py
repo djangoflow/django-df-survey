@@ -8,7 +8,7 @@ from django.contrib.auth import get_user_model
 from django.core import exceptions
 from django.db import models
 from django.db.models import OuterRef, Subquery
-from django.db.models.signals import m2m_changed, post_save
+from django.db.models.signals import post_save
 from django.dispatch import receiver
 from model_utils.models import TimeStampedModel
 
@@ -69,6 +69,10 @@ class SurveyQuestion(models.Model):
         help_text="Display sequence, lower means first", default=1000
     )
 
+    class Meta:
+        unique_together = ("survey", "question")
+        ordering = ("sequence",)
+
 
 class Survey(models.Model):
     title = models.CharField(max_length=128)
@@ -81,6 +85,9 @@ class Survey(models.Model):
     )
     task = models.JSONField(validators=[validate_task_json], null=True, blank=True)
     questions = models.ManyToManyField("Question", through=SurveyQuestion)
+
+    def generate_task(self):
+        self.task = SurveyKitRenderer.generate_task_from_survey(self)
 
     def get_responses(self):
         qs = self.questions.all()
@@ -242,16 +249,6 @@ class Response(models.Model):
     usersurvey = models.ForeignKey(UserSurvey, on_delete=models.CASCADE)
     question = models.ForeignKey(Question, on_delete=models.CASCADE)
     response = models.TextField()
-
-
-# TODO: I left this as pre_save because we cannot hande it in m2m_changed
-# Because it fires for every m2m entry. So the method will be called many times
-# that is not a problem because if instance.task is non null we will not touch it
-@receiver(m2m_changed, sender=Survey)
-def generate_task_from_questions(sender, instance, **kwargs):
-    if not instance.task and instance.questions.exists():
-        instance.task = SurveyKitRenderer.generate_task_from_survey(instance)
-        instance.save(update_fields=["task"])
 
 
 # TODO: This would make sense if we were doing rewrites

@@ -51,6 +51,8 @@ class SurveyAdminForm(forms.ModelForm):
                 SurveyQuestion.objects.create(
                     survey=survey, question_id=row.object_id, sequence=idx + 1
                 )
+            survey.generate_task()
+            survey.save()
 
         return survey
 
@@ -107,7 +109,12 @@ class SurveyAdmin(admin.ModelAdmin):
         for survey in queryset:
             UserSurvey.objects.create_for_users(survey=survey, users=None)
 
-    actions = [create_for_all_users]
+    def generate_tasks(self, request, queryset):
+        for survey in queryset:
+            survey.generate_task()
+            survey.save()
+
+    actions = [create_for_all_users, generate_tasks]
 
 
 @admin.register(UserSurvey)
