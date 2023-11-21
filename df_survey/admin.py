@@ -18,6 +18,7 @@ from .models import (
     Survey,
     SurveyQuestion,
     UserSurvey,
+    UserSurveyNotification,
 )
 from .resources import QuestionResource
 
@@ -141,7 +142,12 @@ class UserSurveyAdmin(AdminChangeLinksMixin, admin.ModelAdmin):
         for user_survey in queryset:
             user_survey.parse_survey_response()
 
-    actions = [parse_survey_response]
+    def send_notifications(self, request, queryset):
+        for user_survey in queryset:
+            for notification in UserSurveyNotification.objects.all():
+                notification.send(user_survey)
+
+    actions = [parse_survey_response, send_notifications]
 
 
 @admin.register(Question)
