@@ -1,0 +1,11 @@
+{% extends "admin/change_form.html" %}
+
+{% block object-tools-items %}
+    {{ block.super }}
+    <li>
+      <a href="{% url 'admin:df_survey_survey_import_questions' original.pk %}" class="button">Import Questions</a>
+    </li>
+    <li>
+        <a href="{% url 'admin:df_survey_survey_export_questions' original.pk %}" class="button">Export Questions</a>
+    </li>
+{% endblock %}

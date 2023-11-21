@@ -1,0 +1,15 @@
+{% extends "admin/import_export/import.html" %}
+{% load i18n %}
+
+{% block confirm_import_form %}
+<form action="{% url "admin:df_survey_survey_process_import_questions" request.kwargs.survey_id %}" method="POST">
+    {% csrf_token %}
+    {{ confirm_form.as_p }}
+    <p>
+        {% trans "Below is a preview of data to be imported. If you are satisfied with the results, click 'Confirm import'" %}
+    </p>
+    <div class="submit-row">
+        <input type="submit" class="default" name="confirm" value="{% trans "Confirm import" %}">
+    </div>
+</form>
+{% endblock %}

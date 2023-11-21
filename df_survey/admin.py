@@ -1,5 +1,4 @@
 import openpyxl
-import tablib
 from django import forms
 from django.contrib import admin
 from django.db.models import JSONField
@@ -8,7 +7,9 @@ from django.shortcuts import get_object_or_404
 from django.urls import path, reverse
 from django.utils.html import format_html
 from django_admin_relation_links import AdminChangeLinksMixin
-from import_export.admin import ImportExportMixin
+from import_export import fields
+from import_export.admin import ImportExportModelAdmin
+from import_export.resources import ModelResource
 from jsoneditor.forms import JSONEditor
 
 from .models import (
@@ -20,7 +21,7 @@ from .models import (
     UserSurvey,
     UserSurveyNotification,
 )
-from .resources import QuestionResource
+from .resources import HashIdWidget
 
 
 class ReadOnlyInline(admin.TabularInline):
@@ -51,26 +52,58 @@ class SurveyAdminForm(forms.ModelForm):
         model = Survey
         fields = "__all__"
 
-    def save(self, commit=True):
-        survey = super().save(commit)
-        survey_file = self.cleaned_data.get("questions_file")
-        if survey_file:
-            dataset = tablib.Dataset()
-            dataset.load(survey_file.read())
-            question_resource = QuestionResource()
-            rows = question_resource.import_data(dataset, dry_run=False)
-            for idx, row in enumerate(rows):
-                SurveyQuestion.objects.create(
-                    survey=survey, question_id=row.object_id, sequence=idx + 1
-                )
-            survey.generate_task()
-            survey.save()
+    # def save(self, commit=True):
+    #     survey = super().save(commit)
+    #     survey_file = self.cleaned_data.get("questions_file")
+    #     if survey_file:
+    #         dataset = tablib.Dataset()
+    #         dataset.load(survey_file.read())
+    #         question_resource = QuestionResource()
+    #         rows = question_resource.import_data(dataset, dry_run=False)
+    #         for idx, row in enumerate(rows):
+    #             SurveyQuestion.objects.create(
+    #                 survey=survey, question_id=row.object_id, sequence=idx + 1
+    #             )
+    #         survey.generate_task()
+    #         survey.save()
+    #
+    #     return survey
 
-        return survey
+
+class QuestionsOfSurveyResource(ModelResource):
+    id = fields.Field(column_name="id", attribute="id", widget=HashIdWidget())
+
+    class Meta:
+        model = Question
+        fields = ["id", "question", "type", "format"]
+        export_order = fields
+
+    def before_import(self, dataset, using_transactions, dry_run, **kwargs):
+        ...
+
+    def after_import_instance(self, instance, new, row_number=None, **kwargs):
+        ...
+
+    # def get_queryset(self):
+    #     return Question.objects.filter(survey__id=self.kwargs["survey_id"])
+
+
+class QuestionsOfSurveyImportExport(ImportExportModelAdmin):
+    model = Question
+    import_template_name = "admin/df_survey/survey/import_questions.html"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.admin_site = admin.site
+
+    resource_class = QuestionsOfSurveyResource
+
+    def get_export_queryset(self, request):
+        return Question.objects.filter(survey__id=request.kwargs["survey_id"])
 
 
 @admin.register(Survey)
-class SurveyAdmin(admin.ModelAdmin):
+class SurveyAdmin(ImportExportModelAdmin):
     form = SurveyAdminForm
     inlines = [SurveyQuestionInline]
     formfield_overrides = {
@@ -79,6 +112,47 @@ class SurveyAdmin(admin.ModelAdmin):
 
     list_display = ("id", "category", "title", "description", "download")
     list_filter = ("category__slug",)
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom_urls = [
+            path(
+                "download/<str:survey_template_id>/",
+                self.admin_site.admin_view(self.download_results),
+                name="template_download",
+            ),
+            path(
+                "<str:survey_id>/import_questions/",
+                self.admin_site.admin_view(self.import_questions_view),
+                name="df_survey_survey_import_questions",
+            ),
+            path(
+                "<str:survey_id>/process_import_questions/",
+                self.admin_site.admin_view(self.process_import_questions_view),
+                name="df_survey_survey_process_import_questions",
+            ),
+            path(
+                "<str:survey_id>/export_questions/",
+                self.admin_site.admin_view(self.export_questions_view),
+                name="df_survey_survey_export_questions",
+            ),
+        ]
+        return custom_urls + urls
+
+    def import_questions_view(self, request, **kwargs):
+        # Redirect to the generic import view with a context tailored for the specific survey
+        request.kwargs = kwargs
+        return QuestionsOfSurveyImportExport(Survey, admin.site).import_action(request)
+
+    def process_import_questions_view(self, request, **kwargs):
+        # Redirect to the generic import view with a context tailored for the specific survey
+        request.kwargs = kwargs
+        return QuestionsOfSurveyImportExport(Survey, admin.site).process_import(request)
+
+    def export_questions_view(self, request, **kwargs):
+        # Redirect to the generic export view with a context tailored for the specific survey
+        request.kwargs = kwargs
+        return QuestionsOfSurveyImportExport(Survey, admin.site).export_action(request)
 
     def download(self, obj):
         return format_html(
@@ -104,17 +178,6 @@ class SurveyAdmin(admin.ModelAdmin):
 
         wb.save(response)
         return response
-
-    def get_urls(self):
-        urls = super().get_urls()
-        custom_urls = [
-            path(
-                "download/<str:survey_template_id>/",
-                self.admin_site.admin_view(self.download_results),
-                name="template_download",
-            ),
-        ]
-        return custom_urls + urls
 
     @admin.action(description="Assign this survey to all users")
     def create_for_all_users(self, request, queryset):
@@ -171,8 +234,7 @@ class UserSurveyAdmin(AdminChangeLinksMixin, admin.ModelAdmin):
 
 
 @admin.register(Question)
-class QuestionAdmin(ImportExportMixin, admin.ModelAdmin):
-    resource_class = QuestionResource
+class QuestionAdmin(admin.ModelAdmin):
     list_display = ("question", "type", "format")
     search_fields = ("question",)
     list_filter = ("type",)
