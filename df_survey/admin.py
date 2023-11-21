@@ -23,12 +23,23 @@ from .models import (
 from .resources import QuestionResource
 
 
+class ReadOnlyInline(admin.TabularInline):
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
 @admin.register(Category)
 class CategoryAdmin(admin.ModelAdmin):
     list_display = ("id", "slug")
 
 
-class SurveyQuestionAdmin(admin.TabularInline):
+class SurveyQuestionInline(admin.TabularInline):
     model = SurveyQuestion
     extra = 3
 
@@ -61,7 +72,7 @@ class SurveyAdminForm(forms.ModelForm):
 @admin.register(Survey)
 class SurveyAdmin(admin.ModelAdmin):
     form = SurveyAdminForm
-    inlines = [SurveyQuestionAdmin]
+    inlines = [SurveyQuestionInline]
     formfield_overrides = {
         JSONField: {"widget": JSONEditor},
     }
@@ -118,8 +129,14 @@ class SurveyAdmin(admin.ModelAdmin):
     actions = [create_for_all_users, generate_tasks]
 
 
+class ResponseInline(ReadOnlyInline):
+    model = Response
+    extra = 0
+
+
 @admin.register(UserSurvey)
 class UserSurveyAdmin(AdminChangeLinksMixin, admin.ModelAdmin):
+    inlines = [ResponseInline]
     formfield_overrides = {
         JSONField: {"widget": JSONEditor},
     }
@@ -148,6 +165,9 @@ class UserSurveyAdmin(AdminChangeLinksMixin, admin.ModelAdmin):
                 notification.send(user_survey)
 
     actions = [parse_survey_response, send_notifications]
+
+    class Media:
+        css = {"all": ("df_survey/admin/css/user_surveys.css",)}
 
 
 @admin.register(Question)
