@@ -7,6 +7,7 @@ from df_api_drf.defaults import (
 from df_api_drf.defaults import (
     SPECTACULAR_SETTINGS as DEFAULT_SPECTACULAR_SETTINGS,
 )
+from df_notifications.defaults import DF_NOTIFICATIONS_INSTALLED_APPS
 
 from df_survey.defaults import DF_SURVEY_INSTALLED_APPS
 
@@ -34,7 +35,10 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "jsoneditor",
     "import_export",
+    "otp_twilio",
+    "dbtemplates",
     *DF_API_DRF_INSTALLED_APPS,
+    *DF_NOTIFICATIONS_INSTALLED_APPS,
     *DF_SURVEY_INSTALLED_APPS,
     "tests.test_app.apps.TestAppConfig",
 ]
@@ -63,6 +67,7 @@ TEMPLATES = [
             "loaders": [
                 "django.template.loaders.filesystem.Loader",
                 "django.template.loaders.app_directories.Loader",
+                "dbtemplates.loader.Loader",
             ],
         },
     },

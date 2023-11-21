@@ -4,10 +4,18 @@
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from df_notifications.decorators import (
+    register_reminder_model,
+    register_rule_model,
+)
+from df_notifications.models import (
+    NotificationModelReminder,
+    NotificationModelRule,
+)
 from django.contrib.auth import get_user_model
 from django.core import exceptions
 from django.db import models
-from django.db.models import OuterRef, Subquery, Value
+from django.db.models import OuterRef, QuerySet, Subquery, Value
 from django.db.models.functions import Coalesce
 from django.db.models.signals import post_save
 from django.dispatch import receiver
@@ -239,6 +247,23 @@ class Response(models.Model):
     usersurvey = models.ForeignKey(UserSurvey, on_delete=models.CASCADE)
     question = models.ForeignKey(Question, on_delete=models.CASCADE)
     response = models.TextField()
+
+
+@register_rule_model
+class UserSurveyNotification(NotificationModelRule):
+    model = UserSurvey
+    tracking_fields = []
+
+
+@register_reminder_model
+class UserSurveysReminder(NotificationModelReminder):
+    model = UserSurvey
+
+    def get_model_queryset(self) -> QuerySet[UserSurvey]:
+        return super().get_model_queryset().filter(result__isnull=True)
+
+    def get_users(self, instance: UserSurvey) -> list:
+        return [instance.user]
 
 
 # TODO: This would make sense if we were doing rewrites
