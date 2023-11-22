@@ -1,14 +1,16 @@
 import openpyxl
 from django import forms
 from django.contrib import admin
+from django.db import models
 from django.db.models import JSONField
-from django.http import HttpResponse
+from django.http import HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404
 from django.urls import path, reverse
 from django.utils.html import format_html
 from django_admin_relation_links import AdminChangeLinksMixin
 from import_export import fields
 from import_export.admin import ImportExportModelAdmin
+from import_export.instance_loaders import ModelInstanceLoader
 from import_export.resources import ModelResource
 from jsoneditor.forms import JSONEditor
 
@@ -17,7 +19,6 @@ from .models import (
     Question,
     Response,
     Survey,
-    SurveyQuestion,
     UserSurvey,
     UserSurveyNotification,
 )
@@ -40,9 +41,12 @@ class CategoryAdmin(admin.ModelAdmin):
     list_display = ("id", "slug")
 
 
-class SurveyQuestionInline(admin.TabularInline):
-    model = SurveyQuestion
-    extra = 3
+class QuestionInline(admin.TabularInline):
+    formfield_overrides = {models.TextField: {"widget": forms.TextInput()}}
+    model = Question
+    extra = 0
+
+    # fields = ("question", "type", "format", "order")
 
 
 class SurveyAdminForm(forms.ModelForm):
@@ -70,7 +74,13 @@ class SurveyAdminForm(forms.ModelForm):
     #     return survey
 
 
-class QuestionsOfSurveyResource(ModelResource):
+class QuestionInstanceLoader(ModelInstanceLoader):
+    def get_queryset(self):
+        ...
+
+
+class QuestionResource(ModelResource):
+    instances_to_keep = set()
     id = fields.Field(column_name="id", attribute="id", widget=HashIdWidget())
 
     class Meta:
@@ -78,17 +88,30 @@ class QuestionsOfSurveyResource(ModelResource):
         fields = ["id", "question", "type", "format"]
         export_order = fields
 
-    def before_import(self, dataset, using_transactions, dry_run, **kwargs):
-        ...
+    def before_import_row(self, row, row_number=None, **kwargs):
+        # Clean IDs if we are importing questions from another survey
+        if row["id"] not in kwargs["question_ids"]:
+            row["id"] = None
+        if row["question"] is None:
+            row["question"] = ""
+
+    def skip_row(self, instance, original, row, import_validation_errors=None):
+        return not instance.question
 
     def after_import_instance(self, instance, new, row_number=None, **kwargs):
-        ...
+        instance.survey_id = kwargs["survey_id"]
+        instance.sequence = row_number
 
-    # def get_queryset(self):
-    #     return Question.objects.filter(survey__id=self.kwargs["survey_id"])
+    def after_save_instance(self, instance, using_transactions, dry_run):
+        self.instances_to_keep.add(instance.id)
+
+    def after_import(self, dataset, result, using_transactions, dry_run, **kwargs):
+        Question.objects.filter(survey_id=kwargs["survey_id"]).exclude(
+            id__in=self.instances_to_keep
+        ).delete()
 
 
-class QuestionsOfSurveyImportExport(ImportExportModelAdmin):
+class QuestionImportExport(ImportExportModelAdmin):
     model = Question
     import_template_name = "admin/df_survey/survey/import_questions.html"
 
@@ -96,16 +119,37 @@ class QuestionsOfSurveyImportExport(ImportExportModelAdmin):
         super().__init__(*args, **kwargs)
         self.admin_site = admin.site
 
-    resource_class = QuestionsOfSurveyResource
+    resource_class = QuestionResource
+
+    def get_import_data_kwargs(self, request, *args, **kwargs):
+        survey_id = request.kwargs["survey_id"]
+        return {
+            **super().get_import_data_kwargs(request, *args, **kwargs),
+            "survey_id": survey_id,
+            "question_ids": set(
+                Question.objects.filter(survey_id=survey_id).values_list(
+                    "id", flat=True
+                )
+            ),
+        }
 
     def get_export_queryset(self, request):
         return Question.objects.filter(survey__id=request.kwargs["survey_id"])
+
+    def process_result(self, result, request):
+        super().process_result(result, request)
+        return HttpResponseRedirect(
+            reverse(
+                "admin:df_survey_survey_change",
+                args=(request.kwargs["survey_id"],),
+            )
+        )
 
 
 @admin.register(Survey)
 class SurveyAdmin(ImportExportModelAdmin):
     form = SurveyAdminForm
-    inlines = [SurveyQuestionInline]
+    inlines = [QuestionInline]
     formfield_overrides = {
         JSONField: {"widget": JSONEditor},
     }
@@ -142,17 +186,17 @@ class SurveyAdmin(ImportExportModelAdmin):
     def import_questions_view(self, request, **kwargs):
         # Redirect to the generic import view with a context tailored for the specific survey
         request.kwargs = kwargs
-        return QuestionsOfSurveyImportExport(Survey, admin.site).import_action(request)
+        return QuestionImportExport(Survey, admin.site).import_action(request)
 
     def process_import_questions_view(self, request, **kwargs):
         # Redirect to the generic import view with a context tailored for the specific survey
         request.kwargs = kwargs
-        return QuestionsOfSurveyImportExport(Survey, admin.site).process_import(request)
+        return QuestionImportExport(Survey, admin.site).process_import(request)
 
     def export_questions_view(self, request, **kwargs):
         # Redirect to the generic export view with a context tailored for the specific survey
         request.kwargs = kwargs
-        return QuestionsOfSurveyImportExport(Survey, admin.site).export_action(request)
+        return QuestionImportExport(Survey, admin.site).export_action(request)
 
     def download(self, obj):
         return format_html(
@@ -190,6 +234,9 @@ class SurveyAdmin(ImportExportModelAdmin):
             survey.save()
 
     actions = [create_for_all_users, generate_tasks]
+
+    class Media:
+        css = {"all": ("df_survey/admin/css/surveys.css",)}
 
 
 class ResponseInline(ReadOnlyInline):

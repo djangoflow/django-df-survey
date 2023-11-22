@@ -71,18 +71,6 @@ def validate_task_json(json):
             raise exceptions.ValidationError(errors)
 
 
-class SurveyQuestion(models.Model):
-    survey = models.ForeignKey("Survey", on_delete=models.CASCADE)
-    question = models.ForeignKey("Question", on_delete=models.CASCADE)
-    sequence = models.PositiveSmallIntegerField(
-        help_text="Display sequence, lower means first", default=1000
-    )
-
-    class Meta:
-        unique_together = ("survey", "question")
-        ordering = ("sequence",)
-
-
 class Survey(models.Model):
     title = models.CharField(max_length=128)
     description = models.TextField(null=True, blank=True)
@@ -93,13 +81,12 @@ class Survey(models.Model):
         Category, on_delete=models.SET_NULL, null=True, blank=True
     )
     task = models.JSONField(validators=[validate_task_json], null=True, blank=True)
-    questions = models.ManyToManyField("Question", through=SurveyQuestion)
 
     def generate_task(self):
         self.task = SurveyKitRenderer.generate_task_from_survey(self)
 
     def get_responses(self):
-        qs = self.questions.all()
+        qs = self.question_set.all()
         users = (
             Response.objects.filter(usersurvey__survey=self)
             .values_list("usersurvey__user__email", flat=True)
@@ -229,17 +216,19 @@ class Question(models.Model):
         single = "single", "Single choice"
         multi = "multi", "Multiple choice"
 
+    survey = models.ForeignKey(Survey, on_delete=models.CASCADE)
+    sequence = models.PositiveSmallIntegerField(
+        help_text="Display sequence, lower means first", default=1000
+    )
     question = models.CharField(max_length=255)
     type = models.CharField(choices=Type.choices, max_length=255)
-    # TODO:
-    # format should understand simple formats
-    # min..max for numbers, e.g. 0..100
-    # minLengh..maxLength for strings, e.g. 0..500
-    # red|green|blue - choices
     format = models.TextField(default="", blank=True)
 
     def __str__(self):
         return self.question
+
+    class Meta:
+        ordering = ["sequence"]
 
 
 class Response(models.Model):
