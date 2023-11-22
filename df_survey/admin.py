@@ -10,7 +10,6 @@ from django.utils.html import format_html
 from django_admin_relation_links import AdminChangeLinksMixin
 from import_export import fields
 from import_export.admin import ImportExportModelAdmin
-from import_export.instance_loaders import ModelInstanceLoader
 from import_export.resources import ModelResource
 from jsoneditor.forms import JSONEditor
 
@@ -46,37 +45,11 @@ class QuestionInline(admin.TabularInline):
     model = Question
     extra = 0
 
-    # fields = ("question", "type", "format", "order")
-
 
 class SurveyAdminForm(forms.ModelForm):
-    questions_file = forms.FileField(required=False)
-
     class Meta:
         model = Survey
         fields = "__all__"
-
-    # def save(self, commit=True):
-    #     survey = super().save(commit)
-    #     survey_file = self.cleaned_data.get("questions_file")
-    #     if survey_file:
-    #         dataset = tablib.Dataset()
-    #         dataset.load(survey_file.read())
-    #         question_resource = QuestionResource()
-    #         rows = question_resource.import_data(dataset, dry_run=False)
-    #         for idx, row in enumerate(rows):
-    #             SurveyQuestion.objects.create(
-    #                 survey=survey, question_id=row.object_id, sequence=idx + 1
-    #             )
-    #         survey.generate_task()
-    #         survey.save()
-    #
-    #     return survey
-
-
-class QuestionInstanceLoader(ModelInstanceLoader):
-    def get_queryset(self):
-        ...
 
 
 class QuestionResource(ModelResource):
@@ -103,7 +76,9 @@ class QuestionResource(ModelResource):
         instance.sequence = row_number
 
     def after_save_instance(self, instance, using_transactions, dry_run):
-        self.instances_to_keep.add(instance.id)
+        pass
+        # TODO: uncomment if we want to remove questions that are not in the file
+        # self.instances_to_keep.add(instance.id)
 
     def after_import(self, dataset, result, using_transactions, dry_run, **kwargs):
         Question.objects.filter(survey_id=kwargs["survey_id"]).exclude(
