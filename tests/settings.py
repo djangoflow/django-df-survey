@@ -37,6 +37,7 @@ INSTALLED_APPS = [
     "import_export",
     "otp_twilio",
     "dbtemplates",
+    "admin_auto_filters",
     *DF_API_DRF_INSTALLED_APPS,
     *DF_NOTIFICATIONS_INSTALLED_APPS,
     *DF_SURVEY_INSTALLED_APPS,

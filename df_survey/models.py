@@ -131,7 +131,6 @@ class UserSurveyManager(models.Manager):
 class UserSurvey(TimeStampedModel):
     user_attribute = "user"
     user = models.ForeignKey(User, on_delete=models.CASCADE)
-
     survey = models.ForeignKey(Survey, on_delete=models.CASCADE)
     result = models.JSONField(null=True, blank=True)
     objects = UserSurveyManager()
@@ -206,6 +205,7 @@ class UserSurvey(TimeStampedModel):
 
     class Meta:
         ordering = ["-modified"]
+        unique_together = ["user", "survey"]
 
 
 class Question(models.Model):

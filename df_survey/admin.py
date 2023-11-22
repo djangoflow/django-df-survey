@@ -1,10 +1,16 @@
 import openpyxl
+from admin_auto_filters.filters import AutocompleteFilter
 from django import forms
-from django.contrib import admin
+from django.contrib import admin, messages
+from django.contrib.admin.widgets import (
+    AutocompleteSelectMultiple,
+)
+from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Group
 from django.db import models
-from django.db.models import JSONField
+from django.db.models import JSONField, Q
 from django.http import HttpResponse, HttpResponseRedirect
-from django.shortcuts import get_object_or_404
+from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import path, reverse
 from django.utils.html import format_html
 from django_admin_relation_links import AdminChangeLinksMixin
@@ -22,6 +28,8 @@ from .models import (
     UserSurveyNotification,
 )
 from .resources import HashIdWidget
+
+User = get_user_model()
 
 
 class ReadOnlyInline(admin.TabularInline):
@@ -46,10 +54,45 @@ class QuestionInline(admin.TabularInline):
     extra = 0
 
 
-class SurveyAdminForm(forms.ModelForm):
+class SurveyUsersModel(models.Model):
+    users = models.ManyToManyField(User, blank=True)
+    groups = models.ManyToManyField(Group, blank=True)
+    survey = models.ForeignKey(Survey, on_delete=models.CASCADE)
+
     class Meta:
-        model = Survey
-        fields = "__all__"
+        abstract = True
+
+
+class SurveyUsersForm(forms.Form):
+    users = forms.ModelMultipleChoiceField(
+        queryset=User.objects.all(),
+        widget=AutocompleteSelectMultiple(
+            UserSurvey._meta.get_field("user"),
+            admin.site,
+        ),
+        required=False,
+    )
+    groups = forms.ModelMultipleChoiceField(
+        queryset=Group.objects.all(),
+        widget=AutocompleteSelectMultiple(
+            User._meta.get_field("groups"),
+            admin.site,
+        ),
+        required=False,
+    )
+
+    def save(self, survey):
+        users = self.cleaned_data["users"]
+        groups = self.cleaned_data["groups"]
+
+        created_user_surveys = []
+        for user in User.objects.filter(Q(groups__in=groups) | Q(id__in=users)):
+            user_survey, created = UserSurvey.objects.get_or_create(
+                user=user, survey=survey
+            )
+            if created:
+                created_user_surveys.append(user_survey)
+        return created_user_surveys
 
 
 class QuestionResource(ModelResource):
@@ -76,19 +119,20 @@ class QuestionResource(ModelResource):
         instance.sequence = row_number
 
     def after_save_instance(self, instance, using_transactions, dry_run):
-        pass
-        # TODO: uncomment if we want to remove questions that are not in the file
-        # self.instances_to_keep.add(instance.id)
+        self.instances_to_keep.add(instance.id)
 
     def after_import(self, dataset, result, using_transactions, dry_run, **kwargs):
-        Question.objects.filter(survey_id=kwargs["survey_id"]).exclude(
-            id__in=self.instances_to_keep
-        ).delete()
+        # TODO: uncomment if we want to remove questions that are not in the file
+        # Question.objects.filter(survey_id=kwargs["survey_id"]).exclude(
+        #     id__in=self.instances_to_keep
+        # ).delete()
+        pass
 
 
 class QuestionImportExport(ImportExportModelAdmin):
     model = Question
     import_template_name = "admin/df_survey/survey/import_questions.html"
+    export_template_name = "admin/df_survey/survey/export_questions.html"
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -123,11 +167,11 @@ class QuestionImportExport(ImportExportModelAdmin):
 
 @admin.register(Survey)
 class SurveyAdmin(ImportExportModelAdmin):
-    form = SurveyAdminForm
     inlines = [QuestionInline]
     formfield_overrides = {
         JSONField: {"widget": JSONEditor},
     }
+    search_fields = ("title",)
 
     list_display = ("id", "category", "title", "description", "download")
     list_filter = ("category__slug",)
@@ -155,8 +199,42 @@ class SurveyAdmin(ImportExportModelAdmin):
                 self.admin_site.admin_view(self.export_questions_view),
                 name="df_survey_survey_export_questions",
             ),
+            path(
+                "<str:survey_id>/assign_users/",
+                self.admin_site.admin_view(self.assign_users_view),
+                name="df_survey_survey_assign_users",
+            ),
         ]
         return custom_urls + urls
+
+    def assign_users_view(self, request, **kwargs):
+        request.kwargs = kwargs
+        survey = Survey.objects.get(id=kwargs["survey_id"])
+        if request.method == "POST":
+            form = SurveyUsersForm(request.POST)
+            if form.is_valid():
+                # Custom handling logic here
+                user_surveys = form.save(survey=survey)
+                if len(user_surveys) > 0:
+                    messages.success(
+                        request,
+                        "Successfully assigned %s users to the survey"
+                        % len(user_surveys),
+                    )
+                else:
+                    messages.warning(request, "No users were assigned to the survey")
+
+                return redirect("admin:df_survey_survey_change", kwargs["survey_id"])
+        else:
+            form = SurveyUsersForm()
+
+        context = {
+            "form": form,
+            "opts": self.model._meta,
+            "survey": Survey.objects.get(id=kwargs["survey_id"]),
+        }
+        context.update(self.admin_site.each_context(request))
+        return render(request, "admin/df_survey/survey/assign_users.html", context)
 
     def import_questions_view(self, request, **kwargs):
         # Redirect to the generic import view with a context tailored for the specific survey
@@ -219,13 +297,18 @@ class ResponseInline(ReadOnlyInline):
     extra = 0
 
 
+class SurveyFilter(AutocompleteFilter):
+    title = "Survey"
+    field_name = "survey"
+
+
 @admin.register(UserSurvey)
 class UserSurveyAdmin(AdminChangeLinksMixin, admin.ModelAdmin):
     inlines = [ResponseInline]
     formfield_overrides = {
         JSONField: {"widget": JSONEditor},
     }
-
+    autocomplete_fields = ["user", "survey"]
     list_display = (
         "id",
         "survey_link",
@@ -235,6 +318,7 @@ class UserSurveyAdmin(AdminChangeLinksMixin, admin.ModelAdmin):
     )
     change_links = ["survey"]
     list_filter = (
+        SurveyFilter,
         "survey__category__slug",
         ("result", admin.EmptyFieldListFilter),
     )

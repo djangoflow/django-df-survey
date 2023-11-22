@@ -33,6 +33,7 @@ dependencies = [
     "django-import-export",
     "django-df-notifications>=1.2.0",
     "django-dbtemplates",
+    "django-admin-autocomplete-filter",
 ]
 
 [project.optional-dependencies]

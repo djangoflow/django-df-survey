@@ -1,0 +1,60 @@
+{% extends "admin/base_site.html" %}
+{% load i18n admin_urls static admin_modify %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+<a href="{% url 'admin:index' %}">{% translate 'Home' %}</a>
+&rsaquo; <a href="{% url 'admin:app_list' app_label=opts.app_label %}">{{ opts.app_config.verbose_name }}</a>
+&rsaquo; {% if has_view_permission %}<a href="{% url opts|admin_urlname:'changelist' %}">{{ opts.verbose_name_plural|capfirst }}</a>{% else %}{{ opts.verbose_name_plural|capfirst }}{% endif %}
+&rsaquo; <a href="{% url opts|admin_urlname:'change' request.kwargs.survey_id %}">{{ request.kwargs.survey_id }}</a>
+&rsaquo; Assign Users
+</div>
+{% endblock %}
+
+
+{% block extrastyle %}{{ block.super }}<link rel="stylesheet" href="{% static "admin/css/forms.css" %}">{% endblock %}
+
+
+{% block content %}
+<div id="content-main">
+
+<h1>
+    Assign Users to Survey "{{ survey.title }}"
+</h1>
+
+<form method="post">{% csrf_token %}
+<div>
+{% if form.errors %}
+    <p class="errornote">
+    {% blocktranslate count counter=form.errors.items|length %}Please correct the error below.{% plural %}Please correct the errors below.{% endblocktranslate %}
+    </p>
+{% endif %}
+
+
+<fieldset class="module aligned wide">
+
+
+<div class="form-row">
+    {{ form.groups.errors }}
+    <div class="flex-container">{{ form.groups.label_tag }} {{ form.groups }}</div>
+</div>
+
+<div class="form-row">
+    {{ form.users.errors }}
+    <div class="flex-container">{{ form.users.label_tag }} {{ form.users }}</div>
+</div>
+
+
+</fieldset>
+
+<div class="submit-row">
+    <input type="submit" value="{% translate 'Assign to users' %}" class="default">
+</div>
+
+</div>
+</form></div>
+
+</div>
+
+{{ form.media }}
+{% endblock %}
