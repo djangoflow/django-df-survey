@@ -141,6 +141,7 @@ class UserSurvey(TimeStampedModel):
     result = models.JSONField(null=True, blank=True)
     objects = UserSurveyManager()
 
+    # TODO: move to SurveyKit renderer and rename to parse_results
     def pretty_results(self):
         @dataclass
         class ResultEntry:
