@@ -62,9 +62,7 @@ class SurveyKitRenderer(BaseRenderer):
                 "max": max_,
             }
         if "|" in fmt:
-            return {
-                "choices": fmt.split("|"),
-            }
+            return {"choices": [{"value": v, "text": v} for v in fmt.split("|")]}
         return {}
 
     @classmethod
