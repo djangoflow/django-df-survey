@@ -9,8 +9,8 @@ from df_notifications.decorators import (
     register_rule_model,
 )
 from df_notifications.models import (
-    NotificationModelAsyncReminder,
-    NotificationModelAsyncRule,
+    NotificationModelReminder,
+    NotificationModelRule,
 )
 from django.contrib.auth import get_user_model
 from django.core import exceptions
@@ -97,6 +97,10 @@ class Survey(models.Model):
     def get_responses_as_csv(self):
         users, responses = self.get_responses_tuple()
         return [["Question", *users], *responses]
+
+    def get_responses(self):
+        users = self.get_respondents()
+        return self.question_set.all().annotate_responses(users)
 
     def get_responses_tuple(self):
         users = self.get_respondents()
@@ -208,12 +212,11 @@ class QuestionQuerySet(models.QuerySet):
     def annotate_responses(self, users):
         return self.annotate(
             **{
-                user.email: Coalesce(
+                user: Coalesce(
                     Subquery(
                         queryset=Response.objects.filter(
                             question_id=OuterRef("pk"),
-                            usersurvey__survey=self,
-                            usersurvey__user__email=user.email,
+                            usersurvey__user__email=user,
                         ).values_list("response")[:1]
                     ),
                     Value("", output_field=models.TextField()),
@@ -227,6 +230,8 @@ class QuestionQuerySet(models.QuerySet):
 
 
 class Question(models.Model):
+    objects = QuestionQuerySet.as_manager()
+
     class Type(models.TextChoices):
         text = "text", "Text"
         integer = "integer", "Integer"
@@ -260,13 +265,13 @@ class Response(models.Model):
 
 
 @register_rule_model
-class UserSurveyNotification(NotificationModelAsyncRule):
+class UserSurveyNotification(NotificationModelRule):
     model = UserSurvey
     tracking_fields = []
 
 
 @register_reminder_model
-class UserSurveysReminder(NotificationModelAsyncReminder):
+class UserSurveysReminder(NotificationModelReminder):
     model = UserSurvey
 
     def get_model_queryset(self) -> QuerySet[UserSurvey]:

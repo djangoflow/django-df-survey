@@ -141,7 +141,7 @@ class QuestionResponseResource(ModelResource):
         self.fields.update(
             {
                 user: fields.Field(column_name=user, attribute=user)
-                for user in self.survey.get_response_users()
+                for user in self.survey.get_respondents()
             }
         )
 
@@ -152,16 +152,13 @@ class QuestionResponseExport(ImportExportModelAdmin):
     resource_class = QuestionResponseResource
 
     def get_export_queryset(self, request):
-        return request.kwargs["survey"].get_responses_tuple()[1]
+        return request.kwargs["survey"].get_responses()
 
     def get_export_resource_kwargs(self, request, *args, **kwargs):
         return {
             **super().get_export_resource_kwargs(request, *args, **kwargs),
             "survey": request.kwargs["survey"],
         }
-
-    def get_fields(self, request, obj):
-        return super().get_fields(request, obj)
 
     def get_export_filename(self, request, queryset, file_format):
         return "%s-%s-%s.%s" % (
@@ -184,15 +181,11 @@ class QuestionImportExport(ImportExportModelAdmin):
     resource_class = QuestionResource
 
     def get_import_data_kwargs(self, request, *args, **kwargs):
-        survey_id = request.kwargs["survey"].id
+        survey = request.kwargs["survey"]
         return {
             **super().get_import_data_kwargs(request, *args, **kwargs),
-            "survey_id": survey_id,
-            "question_ids": set(
-                Question.objects.filter(survey_id=survey_id).values_list(
-                    "id", flat=True
-                )
-            ),
+            "survey": survey,
+            "question_ids": set(survey.question_set.all().values_list("id", flat=True)),
         }
 
     def get_export_queryset(self, request):
