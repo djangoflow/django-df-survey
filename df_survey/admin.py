@@ -11,6 +11,7 @@ from django.db.models import JSONField, Q
 from django.http import HttpResponseRedirect
 from django.shortcuts import redirect, render
 from django.urls import path, reverse
+from django.utils.timezone import now
 from django_admin_relation_links import AdminChangeLinksMixin
 from import_export import fields
 from import_export.admin import ImportExportModelAdmin
@@ -84,7 +85,9 @@ class SurveyUsersForm(forms.Form):
         groups = self.cleaned_data["groups"]
 
         created_user_surveys = []
-        for user in User.objects.filter(Q(groups__in=groups) | Q(id__in=users)):
+        for user in User.objects.filter(
+            Q(groups__in=groups) | Q(id__in=users.values("id"))
+        ):
             user_survey, created = UserSurvey.objects.get_or_create(
                 user=user, survey=survey
             )
@@ -113,7 +116,7 @@ class QuestionResource(ModelResource):
         return not instance.question
 
     def after_import_instance(self, instance, new, row_number=None, **kwargs):
-        instance.survey_id = kwargs["survey_id"]
+        instance.survey_id = kwargs["survey"].id
         instance.sequence = row_number
 
     def after_save_instance(self, instance, using_transactions, dry_run):
@@ -149,17 +152,24 @@ class QuestionResponseExport(ImportExportModelAdmin):
     resource_class = QuestionResponseResource
 
     def get_export_queryset(self, request):
-        survey = Survey.objects.get(id=request.kwargs["survey_id"])
-        return survey.get_responses_tuple()[1]
+        return request.kwargs["survey"].get_responses_tuple()[1]
 
     def get_export_resource_kwargs(self, request, *args, **kwargs):
         return {
             **super().get_export_resource_kwargs(request, *args, **kwargs),
-            "survey": Survey.objects.get(id=request.kwargs["survey_id"]),
+            "survey": request.kwargs["survey"],
         }
 
     def get_fields(self, request, obj):
         return super().get_fields(request, obj)
+
+    def get_export_filename(self, request, queryset, file_format):
+        return "%s-%s-%s.%s" % (
+            request.kwargs["survey"].title,
+            "responses",
+            now().strftime("%Y-%m-%d"),
+            file_format.get_extension(),
+        )
 
 
 class QuestionImportExport(ImportExportModelAdmin):
@@ -174,7 +184,7 @@ class QuestionImportExport(ImportExportModelAdmin):
     resource_class = QuestionResource
 
     def get_import_data_kwargs(self, request, *args, **kwargs):
-        survey_id = request.kwargs["survey_id"]
+        survey_id = request.kwargs["survey"].id
         return {
             **super().get_import_data_kwargs(request, *args, **kwargs),
             "survey_id": survey_id,
@@ -186,15 +196,23 @@ class QuestionImportExport(ImportExportModelAdmin):
         }
 
     def get_export_queryset(self, request):
-        return Question.objects.filter(survey__id=request.kwargs["survey_id"])
+        return Question.objects.filter(survey__id=request.kwargs["survey"].id)
 
     def process_result(self, result, request):
         super().process_result(result, request)
         return HttpResponseRedirect(
             reverse(
                 "admin:df_survey_survey_change",
-                args=(request.kwargs["survey_id"],),
+                args=(request.kwargs["survey"].id,),
             )
+        )
+
+    def get_export_filename(self, request, queryset, file_format):
+        return "%s-%s-%s.%s" % (
+            request.kwargs["survey"].title,
+            "questions",
+            now().strftime("%Y-%m-%d"),
+            file_format.get_extension(),
         )
 
 
@@ -246,12 +264,12 @@ class SurveyAdmin(ImportExportModelAdmin):
         return custom_urls + urls
 
     def assign_users_view(self, request, **kwargs):
-        request.kwargs = kwargs
-        survey = Survey.objects.get(id=kwargs["survey_id"])
+        self.set_request_kwargs(request, **kwargs)
+
         if request.method == "POST":
             form = SurveyUsersForm(request.POST)
             if form.is_valid():
-                user_surveys = form.save(survey=survey)
+                user_surveys = form.save(survey=request.kwargs["survey"])
                 if len(user_surveys) > 0:
                     messages.success(
                         request,
@@ -273,24 +291,27 @@ class SurveyAdmin(ImportExportModelAdmin):
         context.update(self.admin_site.each_context(request))
         return render(request, "admin/df_survey/survey/assign_users.html", context)
 
+    def set_request_kwargs(self, request, **kwargs):
+        request.kwargs = {"survey": Survey.objects.get(id=kwargs["survey_id"])}
+
     def import_questions_view(self, request, **kwargs):
         # Redirect to the generic import view with a context tailored for the specific survey
-        request.kwargs = kwargs
+        self.set_request_kwargs(request, **kwargs)
         return QuestionImportExport(Survey, admin.site).import_action(request)
 
     def process_import_questions_view(self, request, **kwargs):
         # Redirect to the generic import view with a context tailored for the specific survey
-        request.kwargs = kwargs
+        self.set_request_kwargs(request, **kwargs)
         return QuestionImportExport(Survey, admin.site).process_import(request)
 
     def export_question_responses_view(self, request, **kwargs):
         # Redirect to the generic export view with a context tailored for the specific survey
-        request.kwargs = kwargs
+        self.set_request_kwargs(request, **kwargs)
         return QuestionResponseExport(Survey, admin.site).export_action(request)
 
     def export_questions_view(self, request, **kwargs):
         # Redirect to the generic export view with a context tailored for the specific survey
-        request.kwargs = kwargs
+        self.set_request_kwargs(request, **kwargs)
         return QuestionImportExport(Survey, admin.site).export_action(request)
 
     # # TODO: (eugapx) This has to be implemented via importexport

@@ -188,10 +188,12 @@ class UserSurvey(TimeStampedModel):
         questions = {q.id: q for q in self.survey.questions.all()}
         for result in self.pretty_results():
             if result.step_id in questions:
-                Response.objects.create(
+                Response.objects.update_or_create(
                     usersurvey=self,
                     question=questions[result.step_id],
-                    response=result.answer,
+                    defaults={
+                        "response": result.answer,
+                    },
                 )
 
     def __str__(self):
@@ -252,6 +254,9 @@ class Response(models.Model):
     usersurvey = models.ForeignKey(UserSurvey, on_delete=models.CASCADE)
     question = models.ForeignKey(Question, on_delete=models.CASCADE)
     response = models.TextField()
+
+    class Meta:
+        unique_together = ["usersurvey", "question"]
 
 
 @register_rule_model
