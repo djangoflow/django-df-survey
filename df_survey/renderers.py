@@ -1,4 +1,6 @@
 # This is temporary as we should use standard DRF renderers
+import json
+
 from rest_framework import exceptions
 
 
@@ -51,17 +53,20 @@ class SurveyKitRenderer(BaseRenderer):
 
     @classmethod
     def parse_format(self, fmt: str) -> dict:
-        if ".." in fmt:
-            min_, max_ = fmt.split("..")
-            return {
-                "min": min_,
-                "max": max_,
-            }
-        if "|" in fmt:
-            return {
-                "choices": fmt.split("|"),
-            }
-        return {}
+        try:
+            return json.loads(fmt)
+        except ValueError:
+            if ".." in fmt:
+                min_, max_ = fmt.split("..")
+                return {
+                    "min": min_,
+                    "max": max_,
+                }
+            if "|" in fmt:
+                return {
+                    "choices": fmt.split("|"),
+                }
+            return {}
 
     @classmethod
     def generate_task_from_survey(cls, survey):
