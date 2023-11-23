@@ -53,20 +53,19 @@ class SurveyKitRenderer(BaseRenderer):
 
     @classmethod
     def parse_format(self, fmt: str) -> dict:
-        try:
+        if fmt.startswith("{"):
             return json.loads(fmt)
-        except ValueError:
-            if ".." in fmt:
-                min_, max_ = fmt.split("..")
-                return {
-                    "min": min_,
-                    "max": max_,
-                }
-            if "|" in fmt:
-                return {
-                    "choices": fmt.split("|"),
-                }
-            return {}
+        if ".." in fmt:
+            min_, max_ = fmt.split("..")
+            return {
+                "min": min_,
+                "max": max_,
+            }
+        if "|" in fmt:
+            return {
+                "choices": fmt.split("|"),
+            }
+        return {}
 
     @classmethod
     def generate_task_from_survey(cls, survey):
