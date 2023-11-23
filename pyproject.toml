@@ -1,6 +1,6 @@
 [project]
 name = "django-df-survey"
-version = "0.1.9"
+version = "0.1.10"
 description = "Django DF Survey"
 readme = "README.md"
 authors = [{name = "Apexive OSS", email = "open-source@apexive.com"}]

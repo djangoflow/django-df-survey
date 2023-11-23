@@ -37,7 +37,7 @@ class SurveyKitRenderer(BaseRenderer):
                 "otherField": False,
             },
             "rewrites": {
-                "options": "choices",
+                "textChoices": "choices",
             },
         },
         "multi": {
@@ -46,7 +46,7 @@ class SurveyKitRenderer(BaseRenderer):
                 "otherField": False,
             },
             "rewrites": {
-                "options": "choices",
+                "textChoices": "choices",
             },
         },
     }
