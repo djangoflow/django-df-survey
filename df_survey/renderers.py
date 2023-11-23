@@ -70,7 +70,7 @@ class SurveyKitRenderer(BaseRenderer):
     @classmethod
     def generate_task_from_survey(cls, survey):
         steps = []
-        for question in survey.questions.all():
+        for question in survey.question_set.all():
             try:
                 f = SurveyKitRenderer.FORMATS[question.type]
             except KeyError:

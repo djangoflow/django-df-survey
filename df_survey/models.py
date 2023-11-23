@@ -189,7 +189,7 @@ class UserSurvey(TimeStampedModel):
         super().save(*args, **kwargs)
 
     def parse_survey_response(self):
-        questions = {q.id: q for q in self.survey.questions.all()}
+        questions = {q.id: q for q in self.survey.question_set.all()}
         for result in self.pretty_results():
             if result.step_id in questions:
                 Response.objects.update_or_create(
