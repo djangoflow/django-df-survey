@@ -1,4 +1,3 @@
-import openpyxl
 from admin_auto_filters.filters import AutocompleteFilter
 from django import forms
 from django.contrib import admin, messages
@@ -9,10 +8,9 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.db import models
 from django.db.models import JSONField, Q
-from django.http import HttpResponse, HttpResponseRedirect
-from django.shortcuts import get_object_or_404, redirect, render
+from django.http import HttpResponseRedirect
+from django.shortcuts import redirect, render
 from django.urls import path, reverse
-from django.utils.html import format_html
 from django_admin_relation_links import AdminChangeLinksMixin
 from import_export import fields
 from import_export.admin import ImportExportModelAdmin
@@ -129,6 +127,41 @@ class QuestionResource(ModelResource):
         pass
 
 
+class QuestionResponseResource(ModelResource):
+    class Meta:
+        model = Question
+        fields = ["question"]
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.survey = kwargs["survey"]
+        self.fields.update(
+            {
+                user: fields.Field(column_name=user, attribute=user)
+                for user in self.survey.get_response_users()
+            }
+        )
+
+
+class QuestionResponseExport(ImportExportModelAdmin):
+    model = Question
+    export_template_name = "admin/df_survey/survey/export_question_responses.html"
+    resource_class = QuestionResponseResource
+
+    def get_export_queryset(self, request):
+        survey = Survey.objects.get(id=request.kwargs["survey_id"])
+        return survey.get_responses()
+
+    def get_export_resource_kwargs(self, request, *args, **kwargs):
+        return {
+            **super().get_export_resource_kwargs(request, *args, **kwargs),
+            "survey": Survey.objects.get(id=request.kwargs["survey_id"]),
+        }
+
+    def get_fields(self, request, obj):
+        return super().get_fields(request, obj)
+
+
 class QuestionImportExport(ImportExportModelAdmin):
     model = Question
     import_template_name = "admin/df_survey/survey/import_questions.html"
@@ -173,16 +206,21 @@ class SurveyAdmin(ImportExportModelAdmin):
     }
     search_fields = ("title",)
 
-    list_display = ("id", "category", "title", "description", "download")
+    list_display = (
+        "id",
+        "category",
+        "title",
+        "description",
+    )
     list_filter = ("category__slug",)
 
     def get_urls(self):
         urls = super().get_urls()
         custom_urls = [
             path(
-                "download/<str:survey_template_id>/",
-                self.admin_site.admin_view(self.download_results),
-                name="template_download",
+                "<str:survey_id>/export_question_responses/",
+                self.admin_site.admin_view(self.export_question_responses_view),
+                name="df_survey_survey_export_question_responses",
             ),
             path(
                 "<str:survey_id>/import_questions/",
@@ -213,7 +251,6 @@ class SurveyAdmin(ImportExportModelAdmin):
         if request.method == "POST":
             form = SurveyUsersForm(request.POST)
             if form.is_valid():
-                # Custom handling logic here
                 user_surveys = form.save(survey=survey)
                 if len(user_surveys) > 0:
                     messages.success(
@@ -246,35 +283,32 @@ class SurveyAdmin(ImportExportModelAdmin):
         request.kwargs = kwargs
         return QuestionImportExport(Survey, admin.site).process_import(request)
 
+    def export_question_responses_view(self, request, **kwargs):
+        # Redirect to the generic export view with a context tailored for the specific survey
+        request.kwargs = kwargs
+        return QuestionResponseExport(Survey, admin.site).export_action(request)
+
     def export_questions_view(self, request, **kwargs):
         # Redirect to the generic export view with a context tailored for the specific survey
         request.kwargs = kwargs
         return QuestionImportExport(Survey, admin.site).export_action(request)
 
-    def download(self, obj):
-        return format_html(
-            '<a href="{}" download>Download</a>',
-            reverse("admin:template_download", args=[obj.id]),
-        )
-
-    download.short_description = "Download Results"
-
-    # TODO: (eugapx) This has to be implemented via importexport
-    def download_results(self, request, survey_template_id):
-        # Logic to generate and return XLSX file
-        response = HttpResponse(content_type="application/vnd.ms-excel")
-        response[
-            "Content-Disposition"
-        ] = f'attachment; filename="survey_results_{survey_template_id}.xlsx"'
-        survey = get_object_or_404(Survey, id=survey_template_id)
-        wb = openpyxl.Workbook()
-        ws = wb.active
-        ws.title = "Survey Results"
-        for row in survey.get_responses():
-            ws.append(row)
-
-        wb.save(response)
-        return response
+    # # TODO: (eugapx) This has to be implemented via importexport
+    # def download_results(self, request, survey_template_id):
+    #     # Logic to generate and return XLSX file
+    #     response = HttpResponse(content_type="application/vnd.ms-excel")
+    #     response[
+    #         "Content-Disposition"
+    #     ] = f'attachment; filename="survey_results_{survey_template_id}.xlsx"'
+    #     survey = get_object_or_404(Survey, id=survey_template_id)
+    #     wb = openpyxl.Workbook()
+    #     ws = wb.active
+    #     ws.title = "Survey Results"
+    #     for row in survey.get_responses():
+    #         ws.append(row)
+    #
+    #     wb.save(response)
+    #     return response
 
     @admin.action(description="Assign this survey to all users")
     def create_for_all_users(self, request, queryset):

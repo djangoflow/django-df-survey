@@ -85,15 +85,19 @@ class Survey(models.Model):
     def generate_task(self):
         self.task = SurveyKitRenderer.generate_task_from_survey(self)
 
-    def get_responses(self):
-        qs = self.question_set.all()
-        users = (
+    def get_response_users(self):
+        return (
             Response.objects.filter(usersurvey__survey=self)
             .values_list("usersurvey__user__email", flat=True)
+            .exclude(usersurvey__user__email="")
+            .exclude(usersurvey__user__email__isnull=True)
             .distinct()
         )
 
-        for user in users:
+    def get_responses(self):
+        qs = self.question_set.all()
+
+        for user in self.get_response_users():
             qs = qs.annotate(
                 **{
                     user: Coalesce(
@@ -108,8 +112,10 @@ class Survey(models.Model):
                     )
                 }
             )
-        responses = [["Question", *users], *(qs.values_list("question", *users))]
-        return responses
+
+        return qs
+        # responses = [["Question", *users], *(qs.values_list("question", *users))]
+        # return responses
 
     def __str__(self):
         return f"{self.id}: {self.title}"
