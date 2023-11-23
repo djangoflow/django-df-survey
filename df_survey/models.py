@@ -85,7 +85,7 @@ class Survey(models.Model):
     def generate_task(self):
         self.task = SurveyKitRenderer.generate_task_from_survey(self)
 
-    def get_response_users(self):
+    def get_respondents(self):
         return (
             Response.objects.filter(usersurvey__survey=self)
             .values_list("usersurvey__user__email", flat=True)
@@ -94,28 +94,15 @@ class Survey(models.Model):
             .distinct()
         )
 
-    def get_responses(self):
-        qs = self.question_set.all()
+    def get_responses_as_csv(self):
+        users, responses = self.get_responses_tuple()
+        return [["Question", *users], *responses]
 
-        for user in self.get_response_users():
-            qs = qs.annotate(
-                **{
-                    user: Coalesce(
-                        Subquery(
-                            queryset=Response.objects.filter(
-                                question_id=OuterRef("pk"),
-                                usersurvey__survey=self,
-                                usersurvey__user__email=user,
-                            ).values_list("response")[:1]
-                        ),
-                        Value("", output_field=models.TextField()),
-                    )
-                }
-            )
+    def get_responses_tuple(self):
+        users = self.get_respondents()
+        qs = self.question_set.all().responses_value_list(users)
 
-        return qs
-        # responses = [["Question", *users], *(qs.values_list("question", *users))]
-        # return responses
+        return users, qs
 
     def __str__(self):
         return f"{self.id}: {self.title}"
@@ -213,6 +200,28 @@ class UserSurvey(TimeStampedModel):
     class Meta:
         ordering = ["-modified"]
         unique_together = ["user", "survey"]
+
+
+class QuestionQuerySet(models.QuerySet):
+    def annotate_responses(self, users):
+        return self.annotate(
+            **{
+                user.email: Coalesce(
+                    Subquery(
+                        queryset=Response.objects.filter(
+                            question_id=OuterRef("pk"),
+                            usersurvey__survey=self,
+                            usersurvey__user__email=user.email,
+                        ).values_list("response")[:1]
+                    ),
+                    Value("", output_field=models.TextField()),
+                )
+                for user in users
+            }
+        )
+
+    def responses_value_list(self, users):
+        return self.annotate_responses(users).values_list("question", *users)
 
 
 class Question(models.Model):

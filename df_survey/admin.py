@@ -150,7 +150,7 @@ class QuestionResponseExport(ImportExportModelAdmin):
 
     def get_export_queryset(self, request):
         survey = Survey.objects.get(id=request.kwargs["survey_id"])
-        return survey.get_responses()
+        return survey.get_responses_tuple()[1]
 
     def get_export_resource_kwargs(self, request, *args, **kwargs):
         return {
