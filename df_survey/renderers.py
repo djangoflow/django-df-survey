@@ -42,7 +42,7 @@ class SurveyKitRenderer(BaseRenderer):
         },
         "multi": {
             "defaults": {
-                "type": "multi",
+                "type": "multiple",
                 "otherField": False,
             },
             "rewrites": {
