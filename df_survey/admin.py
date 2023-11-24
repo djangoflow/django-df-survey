@@ -6,7 +6,6 @@ from django.contrib.admin.widgets import (
 )
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
-from django.contrib.auth.models import User as BaseUser
 from django.db import models
 from django.db.models import JSONField, Q
 from django.http import HttpResponseRedirect
@@ -66,7 +65,7 @@ class SurveyUsersForm(forms.Form):
     groups = forms.ModelMultipleChoiceField(
         queryset=Group.objects.all(),
         widget=AutocompleteSelectMultiple(
-            BaseUser._meta.get_field("groups"),
+            User._meta.get_field("groups"),
             admin.site,
         ),
         required=False,
