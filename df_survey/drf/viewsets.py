@@ -15,7 +15,10 @@ class UserSurveyViewSet(
     queryset = UserSurvey.objects.all()
 
     def get_queryset(self):
-        return self.queryset.filter(user=self.request.user)
+        return self.queryset.filter(
+            user=self.request.user,
+            survey__task__isnull=False,
+        )
 
     def get_serializer_class(self):
         if self.action == "list":

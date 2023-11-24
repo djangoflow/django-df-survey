@@ -6,6 +6,7 @@ from django.contrib.admin.widgets import (
 )
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
+from django.contrib.auth.models import User as BaseUser
 from django.db import models
 from django.db.models import JSONField, Q
 from django.http import HttpResponseRedirect
@@ -53,15 +54,6 @@ class QuestionInline(admin.TabularInline):
     extra = 0
 
 
-class SurveyUsersModel(models.Model):
-    users = models.ManyToManyField(User, blank=True)
-    groups = models.ManyToManyField(Group, blank=True)
-    survey = models.ForeignKey(Survey, on_delete=models.CASCADE)
-
-    class Meta:
-        abstract = True
-
-
 class SurveyUsersForm(forms.Form):
     users = forms.ModelMultipleChoiceField(
         queryset=User.objects.all(),
@@ -74,7 +66,7 @@ class SurveyUsersForm(forms.Form):
     groups = forms.ModelMultipleChoiceField(
         queryset=Group.objects.all(),
         widget=AutocompleteSelectMultiple(
-            User._meta.get_field("groups"),
+            BaseUser._meta.get_field("groups"),
             admin.site,
         ),
         required=False,

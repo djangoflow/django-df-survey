@@ -269,6 +269,9 @@ class UserSurveyNotification(NotificationModelAsyncRule):
     model = UserSurvey
     tracking_fields = []
 
+    def get_users(self, instance: UserSurvey) -> list:
+        return [instance.user]
+
 
 @register_reminder_model
 class UserSurveysReminder(NotificationModelAsyncReminder):
