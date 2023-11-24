@@ -9,8 +9,8 @@ from df_notifications.decorators import (
     register_rule_model,
 )
 from df_notifications.models import (
-    NotificationModelReminder,
-    NotificationModelRule,
+    NotificationModelAsyncReminder,
+    NotificationModelAsyncRule,
 )
 from django.contrib.auth import get_user_model
 from django.core import exceptions
@@ -265,13 +265,13 @@ class Response(models.Model):
 
 
 @register_rule_model
-class UserSurveyNotification(NotificationModelRule):
+class UserSurveyNotification(NotificationModelAsyncRule):
     model = UserSurvey
     tracking_fields = []
 
 
 @register_reminder_model
-class UserSurveysReminder(NotificationModelReminder):
+class UserSurveysReminder(NotificationModelAsyncReminder):
     model = UserSurvey
 
     def get_model_queryset(self) -> QuerySet[UserSurvey]:

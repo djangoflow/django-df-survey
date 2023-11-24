@@ -10,6 +10,10 @@ def init_data(apps, schema_editor):
         channel="push",
         template_prefix="df_notifications/usersurveynotification/",
     )
+    UserSurveyNotification.objects.create(
+        channel="email",
+        template_prefix="df_notifications/usersurveynotification/",
+    )
     UserSurveysReminder = apps.get_model("df_survey", "UserSurveysReminder")
     UserSurveysReminder.objects.create(
         channel="push",
