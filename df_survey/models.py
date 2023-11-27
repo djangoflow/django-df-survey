@@ -9,6 +9,7 @@ from df_notifications.decorators import (
     register_rule_model,
 )
 from df_notifications.models import (
+    NotifiableModelMixin,
     NotificationModelAsyncReminder,
     NotificationModelAsyncRule,
 )
@@ -125,7 +126,7 @@ class UserSurveyManager(models.Manager):
                 self.get_or_create(user=user, survey=survey)
 
 
-class UserSurvey(TimeStampedModel):
+class UserSurvey(TimeStampedModel, NotifiableModelMixin):
     user_attribute = "user"
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     survey = models.ForeignKey(Survey, on_delete=models.CASCADE)

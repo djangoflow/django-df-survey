@@ -1,1 +1,1 @@
-{"url": "/surveys/{{ instance.id }}"}
+{"action_url": "/surveys/{{ instance.id }}"}
