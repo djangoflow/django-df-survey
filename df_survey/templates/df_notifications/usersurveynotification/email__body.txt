@@ -1,3 +1,0 @@
-Head to the app to fill out the "{{ instance.survey.title }}" survey.
-
-{{ base_url }}/surveys/{{ instance.id }}
