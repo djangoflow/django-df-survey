@@ -264,8 +264,7 @@ class Question(models.Model):
     objects = QuestionQuerySet.as_manager()
 
     class Type(models.TextChoices):
-        intro = "intro", "Intro"
-        completion = "completion", "Completion"
+        info = "info", "Info"
         text = "text", "Text"
         integer = "integer", "Integer"
         date = "date", "Date"
