@@ -201,7 +201,7 @@ class QuestionImportExport(ImportExportModelAdmin):
 
 
 @admin.register(Survey)
-class SurveyAdmin(ImportExportModelAdmin):
+class SurveyAdmin(admin.ModelAdmin):
     inlines = [QuestionInline]
     formfield_overrides = {
         JSONField: {"widget": JSONEditor},
