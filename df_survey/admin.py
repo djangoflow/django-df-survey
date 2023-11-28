@@ -93,7 +93,7 @@ class QuestionResource(ModelResource):
 
     class Meta:
         model = Question
-        fields = ["id", "question", "type", "format"]
+        fields = ["id", "question", "text", "type", "format"]
         export_order = fields
 
     def before_import_row(self, row, row_number=None, **kwargs):

@@ -234,6 +234,8 @@ class Question(models.Model):
     objects = QuestionQuerySet.as_manager()
 
     class Type(models.TextChoices):
+        intro = "intro", "Intro"
+        completion = "completion", "Completion"
         text = "text", "Text"
         integer = "integer", "Integer"
         date = "date", "Date"
@@ -245,6 +247,7 @@ class Question(models.Model):
         help_text="Display sequence, lower means first", default=1000
     )
     question = models.CharField(max_length=255)
+    text = models.TextField(default="", blank=True)
     type = models.CharField(choices=Type.choices, max_length=255)
     format = models.TextField(default="", blank=True)
 

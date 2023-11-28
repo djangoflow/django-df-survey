@@ -49,6 +49,24 @@ class SurveyKitRenderer(BaseRenderer):
                 "textChoices": "choices",
             },
         },
+        "completion": {
+            "defaults": {
+                "type": "completion",
+            },
+            "rewrites": {
+                "buttonText": "value",
+            },
+            "root": True,
+        },
+        "intro": {
+            "defaults": {
+                "type": "intro",
+            },
+            "rewrites": {
+                "buttonText": "value",
+            },
+            "root": True,
+        },
     }
 
     @classmethod
@@ -63,7 +81,9 @@ class SurveyKitRenderer(BaseRenderer):
             }
         if "|" in fmt:
             return {"choices": [{"value": v, "text": v} for v in fmt.split("|")]}
-        return {}
+        return {
+            "value": fmt,
+        }
 
     @classmethod
     def generate_task_from_survey(cls, survey):
@@ -77,21 +97,27 @@ class SurveyKitRenderer(BaseRenderer):
                 )
 
             question_format = cls.parse_format(question.format)
-            steps.append(
-                {
-                    "type": "question",
-                    "title": question.question,
-                    "answerFormat": {
-                        **f.get("defaults", {}),
-                        **{
-                            k: question_format.get(v)
-                            for k, v in f.get("rewrites", {}).items()
-                            if v in question_format
-                        },
-                    },
-                    "stepIdentifier": {"id": str(question.id)},
-                }
-            )
+            step = {
+                "type": "question",
+                "title": question.question,
+                "text": question.text,
+                "stepIdentifier": {"id": str(question.id)},
+            }
+            data = {
+                **f.get("defaults", {}),
+                **{
+                    k: question_format.get(v)
+                    for k, v in f.get("rewrites", {}).items()
+                    if v in question_format
+                },
+            }
+
+            if f.get("root", False):
+                step.update(data)
+            else:
+                step["answerFormat"] = data
+
+            steps.append(step)
 
         return {
             "id": str(survey.id),
