@@ -72,7 +72,37 @@ def validate_task_json(json):
             raise exceptions.ValidationError(errors)
 
 
+class SurveyQuerySet(models.QuerySet):
+    def annotate_stats(self):
+        return self.annotate(
+            users_completed=Coalesce(
+                Subquery(
+                    UserSurvey.objects.filter(
+                        survey=OuterRef("pk"), result__isnull=False
+                    )
+                    .values("survey")
+                    .annotate(total=models.Count("pk"))
+                    .values("total"),
+                    output_field=models.IntegerField(),
+                ),
+                Value(0),
+            ),
+            users_total=Coalesce(
+                Subquery(
+                    UserSurvey.objects.filter(survey=OuterRef("pk"))
+                    .values("survey")
+                    .annotate(total=models.Count("pk"))
+                    .values("total"),
+                    output_field=models.IntegerField(),
+                ),
+                Value(0),
+            ),
+        )
+
+
 class Survey(models.Model):
+    objects = SurveyQuerySet.as_manager()
+
     title = models.CharField(max_length=128)
     description = models.TextField(null=True, blank=True)
     sequence = models.PositiveSmallIntegerField(

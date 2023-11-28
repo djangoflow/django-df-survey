@@ -213,8 +213,23 @@ class SurveyAdmin(ImportExportModelAdmin):
         "category",
         "title",
         "description",
+        "users_total",
+        "users_completed",
     )
     list_filter = ("category__slug",)
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).annotate_stats()
+
+    def users_total(self, obj):
+        return obj.users_total
+
+    users_total.admin_order_field = "users_total"
+
+    def users_completed(self, obj):
+        return obj.users_completed
+
+    users_completed.admin_order_field = "users_completed"
 
     def get_urls(self):
         urls = super().get_urls()
