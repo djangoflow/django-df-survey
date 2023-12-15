@@ -16,10 +16,11 @@ from df_notifications.models import (
 from django.contrib.auth import get_user_model
 from django.core import exceptions
 from django.db import models
-from django.db.models import OuterRef, QuerySet, Subquery, Value
-from django.db.models.functions import Coalesce
+from django.db.models import F, OuterRef, QuerySet, Subquery, Value
+from django.db.models.functions import Coalesce, Round
 from django.db.models.signals import post_save
 from django.dispatch import receiver
+from django.utils.text import slugify
 from model_utils.models import TimeStampedModel
 
 from df_survey.renderers import SurveyKitRenderer
@@ -132,6 +133,9 @@ class Survey(models.Model):
     def get_responses(self):
         users = self.get_respondents()
         return self.question_set.all().annotate_responses(users)
+
+    def get_responses_stats(self):
+        return self.question_set.all().annotate_responses_stats()
 
     def get_responses_tuple(self):
         users = self.get_respondents()
@@ -255,6 +259,49 @@ class QuestionQuerySet(models.QuerySet):
                 for user in users
             }
         )
+
+    def annotate_responses_stats(self):
+        query = self
+        for response in self.get_responses():
+            response_slug = slugify(response)
+            query = query.annotate(
+                **{
+                    response_slug: Subquery(
+                        Response.objects.filter(
+                            question_id=OuterRef("pk"),
+                            response=response,
+                        )
+                        .values("question")
+                        .annotate(total=models.Count("pk"))
+                        .values("total"),
+                        output_field=models.IntegerField(),
+                    ),
+                    f"{response_slug}_p": Round(
+                        F(response_slug)
+                        * Value(100.0)
+                        / Subquery(
+                            Response.objects.filter(question_id=OuterRef("pk"))
+                            .values("question")
+                            .annotate(total=models.Count("pk"))
+                            .values("total"),
+                            output_field=models.IntegerField(),
+                        ),
+                        precision=1,
+                    ),
+                }
+            )
+        return query
+
+    def get_responses(self):
+        return [
+            row[0]
+            for row in (
+                Response.objects.filter(question__in=self)
+                .order_by("response")
+                .values_list("response")
+                .distinct()
+            )
+        ]
 
     def responses_value_list(self, users):
         return self.annotate_responses(users).values_list("question", *users)

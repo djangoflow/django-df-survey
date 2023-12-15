@@ -11,6 +11,7 @@ from django.db.models import JSONField, Q
 from django.http import HttpResponseRedirect
 from django.shortcuts import redirect, render
 from django.urls import path, reverse
+from django.utils.text import slugify
 from django.utils.timezone import now
 from django_admin_relation_links import AdminChangeLinksMixin
 from import_export import fields
@@ -137,6 +138,24 @@ class QuestionResponseResource(ModelResource):
         )
 
 
+class QuestionResponseStatResource(ModelResource):
+    class Meta:
+        model = Question
+        fields = ["question"]
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.survey = kwargs["survey"]
+        for response in self.survey.question_set.all().get_responses():
+            response_slug = slugify(response)
+            self.fields[response_slug] = fields.Field(
+                column_name=response, attribute=response_slug
+            )
+            self.fields[f"{response_slug}_p"] = fields.Field(
+                column_name=f"{response}, %", attribute=f"{response_slug}_p"
+            )
+
+
 class QuestionResponseExport(ImportExportModelAdmin):
     model = Question
     export_template_name = "admin/df_survey/survey/export_question_responses.html"
@@ -154,10 +173,17 @@ class QuestionResponseExport(ImportExportModelAdmin):
     def get_export_filename(self, request, queryset, file_format):
         return "%s-%s-%s.%s" % (
             request.kwargs["survey"].title,
-            "responses",
+            request.path.strip("/").split("/")[-1].replace("export_question_", ""),
             now().strftime("%Y-%m-%d"),
             file_format.get_extension(),
         )
+
+
+class QuestionResponseStatExport(QuestionResponseExport):
+    resource_class = QuestionResponseStatResource
+
+    def get_export_queryset(self, request):
+        return request.kwargs["survey"].get_responses_stats()
 
 
 class QuestionImportExport(ImportExportModelAdmin):
@@ -240,6 +266,11 @@ class SurveyAdmin(admin.ModelAdmin):
                 name="df_survey_survey_export_question_responses",
             ),
             path(
+                "<str:survey_id>/export_question_responses_stat/",
+                self.admin_site.admin_view(self.export_question_responses_stat_view),
+                name="df_survey_survey_export_question_responses_stat",
+            ),
+            path(
                 "<str:survey_id>/import_questions/",
                 self.admin_site.admin_view(self.import_questions_view),
                 name="df_survey_survey_import_questions",
@@ -307,6 +338,11 @@ class SurveyAdmin(admin.ModelAdmin):
         # Redirect to the generic export view with a context tailored for the specific survey
         self.set_request_kwargs(request, **kwargs)
         return QuestionResponseExport(Survey, admin.site).export_action(request)
+
+    def export_question_responses_stat_view(self, request, **kwargs):
+        # Redirect to the generic export view with a context tailored for the specific survey
+        self.set_request_kwargs(request, **kwargs)
+        return QuestionResponseStatExport(Survey, admin.site).export_action(request)
 
     def export_questions_view(self, request, **kwargs):
         # Redirect to the generic export view with a context tailored for the specific survey
