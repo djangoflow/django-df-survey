@@ -263,33 +263,33 @@ class QuestionQuerySet(models.QuerySet):
     def annotate_responses_stats(self):
         query = self
         for response in self.get_responses():
-            response_slug = slugify(response)
-            query = query.annotate(
-                **{
-                    response_slug: Subquery(
-                        Response.objects.filter(
-                            question_id=OuterRef("pk"),
-                            response=response,
-                        )
-                        .values("question")
-                        .annotate(total=models.Count("pk"))
-                        .values("total"),
-                        output_field=models.IntegerField(),
-                    ),
-                    f"{response_slug}_p": Round(
-                        F(response_slug)
-                        * Value(100.0)
-                        / Subquery(
-                            Response.objects.filter(question_id=OuterRef("pk"))
+            if response_slug := slugify(response):
+                query = query.annotate(
+                    **{
+                        response_slug: Subquery(
+                            Response.objects.filter(
+                                question_id=OuterRef("pk"),
+                                response=response,
+                            )
                             .values("question")
                             .annotate(total=models.Count("pk"))
                             .values("total"),
                             output_field=models.IntegerField(),
                         ),
-                        precision=1,
-                    ),
-                }
-            )
+                        f"{response_slug}_p": Round(
+                            F(response_slug)
+                            * Value(100.0)
+                            / Subquery(
+                                Response.objects.filter(question_id=OuterRef("pk"))
+                                .values("question")
+                                .annotate(total=models.Count("pk"))
+                                .values("total"),
+                                output_field=models.IntegerField(),
+                            ),
+                            precision=1,
+                        ),
+                    }
+                )
         return query
 
     def get_responses(self):

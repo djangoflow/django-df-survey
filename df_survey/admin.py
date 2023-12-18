@@ -147,13 +147,13 @@ class QuestionResponseStatResource(ModelResource):
         super().__init__(**kwargs)
         self.survey = kwargs["survey"]
         for response in self.survey.question_set.all().get_responses():
-            response_slug = slugify(response)
-            self.fields[response_slug] = fields.Field(
-                column_name=f"#{response}", attribute=response_slug
-            )
-            self.fields[f"{response_slug}_p"] = fields.Field(
-                column_name=f"%{response}", attribute=f"{response_slug}_p"
-            )
+            if response_slug := slugify(response):
+                self.fields[response_slug] = fields.Field(
+                    column_name=f"#{response}", attribute=response_slug
+                )
+                self.fields[f"{response_slug}_p"] = fields.Field(
+                    column_name=f"%{response}", attribute=f"{response_slug}_p"
+                )
 
 
 class QuestionResponseExport(ImportExportModelAdmin):
