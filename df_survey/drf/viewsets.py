@@ -1,3 +1,4 @@
+from df_notifications.decorators import disable_notification_signal
 from rest_framework import mixins
 from rest_framework.exceptions import ValidationError
 from rest_framework.viewsets import GenericViewSet
@@ -35,8 +36,9 @@ class UserSurveyViewSet(
         pk = self.kwargs.get("pk", "")
         if pk.startswith("@"):
             survey_pk = pk[1:]
-            return UserSurvey.objects.get_or_create(
-                user=self.request.user,
-                survey_id=survey_pk,
-            )[0]
+            with disable_notification_signal(UserSurvey):
+                return UserSurvey.objects.get_or_create(
+                    user=self.request.user,
+                    survey_id=survey_pk,
+                )[0]
         return super().get_object()

@@ -1,6 +1,6 @@
 [project]
 name = "django-df-survey"
-version = "0.1.23"
+version = "0.1.24"
 description = "Django DF Survey"
 readme = "README.md"
 authors = [{name = "Apexive OSS", email = "open-source@apexive.com"}]
@@ -31,7 +31,7 @@ dependencies = [
     "django-admin-relation-links",
     "django-jsoneditor",
     "django-import-export",
-    "django-df-notifications>=1.2.0",
+    "django-df-notifications>=1.2.8",
     "django-dbtemplates",
     "django-admin-autocomplete-filter",
 ]
